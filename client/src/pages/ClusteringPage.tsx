@@ -37,13 +37,16 @@ export default function ClusteringPage() {
   // Clustering mutation
   const clusterMutation = useMutation({
     mutationFn: async (data: { dataset: string; algorithm: string; dataPoints: any[] }) => {
-      return await apiRequest('POST', '/api/cluster', data);
+      const response = await apiRequest('POST', '/api/cluster', data);
+      return await response.json();
     },
     onSuccess: (data: any) => {
       setClusteringSteps(data.steps || []);
       setFinalClusters(data.finalClusters || []);
       setDendrogramTree(data.dendrogram);
-      setTotalSteps(data.steps?.length || 0);
+      // Exclude the final "complete" step from total steps for animation
+      const animationSteps = Math.max(0, (data.steps?.length || 1) - 1);
+      setTotalSteps(animationSteps);
       setCurrentStep(0);
     },
     onError: (error: any) => {
