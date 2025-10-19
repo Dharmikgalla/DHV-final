@@ -1,0 +1,9 @@
+Patient_ID,Age,Temperature_F,Blood_Pressure_Sys,Blood_Pressure_Dia,Sugar_Level_mg/dL,Symptoms
+P1,25,98.6,120,80,90,"Mild fever, fatigue"
+P2,27,99.1,118,78,95,"Mild fever, cough"
+P3,35,101.5,130,85,100,"High fever, body pain"
+P4,50,97.8,140,90,160,"Normal, slight fatigue"
+P5,52,98.2,135,88,155,"Normal, mild headache"
+P6,48,102.0,145,92,170,"High fever, cough, fatigue"
+P7,60,100.8,150,95,180,"High BP, high sugar"
+P8,62,101.2,155,98,185,"High BP, high sugar, dizziness"

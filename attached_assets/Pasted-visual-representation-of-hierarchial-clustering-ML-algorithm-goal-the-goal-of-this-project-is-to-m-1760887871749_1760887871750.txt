@@ -1,0 +1,87 @@
+visual representation of hierarchial clustering ML algorithm
+
+goal: the goal of this project is to make people from different backgrounds and different professions like(doctors,lawyers,business men) should understand the concept of the hierarchial clustering ML algorithm visually
+
+the technical terms used the algorithm like dendograms, euclidean distance , clustering should be explained in a way that they can understand easily .make story to visually explain the algorithm 
+
+for example ( considering the medical background/profession)
+
+ 🩺 Hierarchical Clustering — A Medical Analogy Story for Visualization
+
+the patients with their unique symptoms and medical readings arrives to the hospital we have cluster them according to the symptoms and make a diagnosis . represent patient in a scatterplot ( dont simply use a bubble in scatter plot instead use an icon for patient
+
+“Grouping Similar Cases”
+show a line connecting the patients with similar symptoms ( dont do it with all patients at once )
+go step by step explaining it clearly 
+first start with two patients with similar symptoms and show a line connecting them and then group them into a single cluster and then go on for remaining patients 
+do it stepwise 
+	•	Visual: The two most similar patients move closer and merge into one “mini-group” (a small cluster).
+	•	Animation could show two bubbles merging into one with combined color or slight glow.
+	
+
+ “Merging Medical Groups”
+	•	Visual: The algorithm continues — now groups of patients (small clusters) start merging into bigger groups.
+	•	Each merge visually looks like two groups of patients being wheeled closer together.
+	
+ “The Medical Family Tree (Dendrogram)”
+build the dendogram also step by step parrallel to the clustering if the two patients are clustered parallely show the branching in the dendogram 
+	•	Visual: On the side, a tree diagram (dendrogram) starts growing.
+	•	Each merge step adds a new branch.
+	•	The tree shows how patient cases evolve from individual to generalized clusters.
+	
+
+ “Finding Disease Clusters”
+	•	Visual:
+	•	The doctor drags a cut line on the dendrogram.
+	•	The screen highlights final clusters in distinct colors (e.g., red for viral, blue for cardiac, green for metabolic).
+	
+
+
+: “Insights and Diagnosis”
+	•	Visual:
+when hovered over a cluster it should show the avg temperature , avg blood presure and diagnosis of that particular cluster whether it is viral infection or metabolic risk or normal 
+	•	Each cluster is labeled with possible medical insights (e.g., “Cluster A: Viral infection group,” “Cluster B: Cardiac risk group”).
+	•	Patients in the same cluster pulse in sync to show they share traits.
+	
+
+
+I have also uploaded the dataset for this story for your reference 
+
+
+
+ build me a website for this using the techstack next.js and tailwind css 
+create the website most effectively with effects,animations according to each profession/background for their understanding 
+allow the users to select their dataset , create a dropdown menu for choosing the dataset (medical _patients) 
+allow users to select the algorithm (Agglomerative (Bottom-Up Approach) , Divisive (Top-Down Approach) ) and also a dropdown menu for chossing the algorithm
+
+visualise it in a scatterplot
+1)first the the scatterplot should contain all the points plotted in it 
+2) then in the next step show a line connecting the two patients with similar symptoms 
+3) in the step 3 show the patients forming a cluster by enclosing them in a circle and add a light background colour to that cluster 
+4) them move to the remaining patients and show the line connecting the patients with similar symptoms and repeat the process of clustering
+5) a patient having similar symptoms with a cluster already formed show them by connecting a line from the cluster to the patient and make them into a cluster 
+
+when hovered on the datapoint it should show(Temperature_F,BP and Sugar_Level_mg/dL)
+show how the two datapoints are clustered and also show the dendogram in a side panel parallel to the scatterpplot 
+instead of using a dot in scatter plot use a icon for patient so that it will visually more appealing to audience
+Step 1: Choose Axes
+
+You can choose any two continuous features as X and Y for simplicity.
+
+Example combinations:
+	•	X-axis: Blood Pressure (Systolic)
+Y-axis: Sugar Level (mg/dL)
+→ shows clusters of patients with similar BP & sugar levels.
+
+or
+	•	X-axis: Temperature (°F)
+Y-axis: Age (years)
+→ shows how fever distribution varies with age.
+
+or
+	•	X-axis: Blood Pressure
+Y-axis: Temperature
+→ can visually separate normal vs. feverish patients.
+
+⸻
+show line connecting the patients with similar symptoms (for example if a patient has high temperature and normal blood pressure (BP) group them into a cluster called viral infection and that cluster should be enclosed in a circle and light red color should be given to cluster when hovered over that cluster it should show the avg temperature and average blood presuure of all patients in that clu...

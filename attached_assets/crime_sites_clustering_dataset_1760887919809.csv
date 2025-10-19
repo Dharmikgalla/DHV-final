@@ -1,0 +1,21 @@
+Crime_ID,Latitude,Longitude,Crime_Type,Time_of_Day,Severity_Level,Reported_By
+C1,19.07,72.87,Theft,Night,3,Citizen
+C2,19.05,72.85,Assault,Evening,2,Police Patrol
+C3,19.09,72.84,Burglary,Morning,4,Citizen
+C4,19.11,72.89,Theft,Afternoon,3,Citizen
+C5,19.12,72.91,Robbery,Night,5,Police Patrol
+C6,19.13,72.92,Assault,Night,2,Citizen
+C7,19.08,72.83,Theft,Evening,3,Citizen
+C8,19.06,72.86,Fraud,Morning,1,Online
+C9,19.04,72.88,Theft,Afternoon,2,Citizen
+C10,19.1,72.9,Murder,Night,5,Police Patrol
+C11,19.15,72.93,Burglary,Evening,4,Online
+C12,19.14,72.94,Assault,Morning,3,Citizen
+C13,19.16,72.95,Robbery,Night,5,Police Patrol
+C14,19.03,72.82,Fraud,Afternoon,2,Citizen
+C15,19.02,72.81,Theft,Morning,1,Online
+C16,19.17,72.96,Assault,Evening,3,Citizen
+C17,19.18,72.97,Murder,Night,5,Police Patrol
+C18,19.01,72.8,Fraud,Afternoon,1,Online
+C19,19.19,72.98,Burglary,Night,4,Citizen
+C20,19.2,72.99,Robbery,Evening,5,Police Patrol
