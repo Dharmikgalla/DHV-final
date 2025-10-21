@@ -70,12 +70,7 @@ function getClusterCenter(cluster: Cluster, points: Point[]): { x: number; y: nu
 // Agglomerative (Bottom-Up) Hierarchical Clustering
 export function agglomerativeClustering(points: Point[]) {
   const steps: MergeStep[] = [];
-  const dendrogramNodes: DendrogramNode[] = points.map((p, idx) => ({
-    height: 0,
-    label: p.id,
-    indices: [idx],
-  }));
-
+  
   // Initialize: each point is its own cluster
   let clusters: Cluster[] = points.map((p, idx) => ({
     points: [idx],
@@ -95,20 +90,42 @@ export function agglomerativeClustering(points: Point[]) {
     action: 'connect',
   });
 
+  // Build distance matrix for efficiency
+  const distanceMatrix: number[][] = [];
+  for (let i = 0; i < points.length; i++) {
+    distanceMatrix[i] = [];
+    for (let j = 0; j < points.length; j++) {
+      if (i === j) {
+        distanceMatrix[i][j] = 0;
+      } else {
+        distanceMatrix[i][j] = euclideanDistance(points[i], points[j]);
+      }
+    }
+  }
+
+  // Track which clusters are still active
+  const activeClusters = new Set<number>();
+  for (let i = 0; i < clusters.length; i++) {
+    activeClusters.add(i);
+  }
+
   // Merge until we have one cluster
-  while (clusters.length > 1) {
+  while (activeClusters.size > 1) {
     // Find the two closest clusters
     let minDistance = Infinity;
     let mergeI = -1;
     let mergeJ = -1;
 
-    for (let i = 0; i < clusters.length; i++) {
-      for (let j = i + 1; j < clusters.length; j++) {
-        const dist = clusterDistance(clusters[i], clusters[j], points);
+    const activeArray = Array.from(activeClusters);
+    for (let i = 0; i < activeArray.length; i++) {
+      for (let j = i + 1; j < activeArray.length; j++) {
+        const clusterI = activeArray[i];
+        const clusterJ = activeArray[j];
+        const dist = clusterDistance(clusters[clusterI], clusters[clusterJ], points);
         if (dist < minDistance) {
           minDistance = dist;
-          mergeI = i;
-          mergeJ = j;
+          mergeI = clusterI;
+          mergeJ = clusterJ;
         }
       }
     }
@@ -126,14 +143,6 @@ export function agglomerativeClustering(points: Point[]) {
     };
     mergedCluster.center = getClusterCenter(mergedCluster, points);
 
-    // Create dendrogram node for this merge
-    const newNode: DendrogramNode = {
-      left: dendrogramNodes[mergeI],
-      right: dendrogramNodes[mergeJ],
-      height: minDistance,
-      indices: mergedPoints,
-    };
-
     // Record this step
     const action = cluster1.points.length === 1 && cluster2.points.length === 1 ? 'connect' : 'merge';
     
@@ -150,12 +159,13 @@ export function agglomerativeClustering(points: Point[]) {
     });
 
     // Update clusters array
-    clusters = clusters.filter((_, idx) => idx !== mergeI && idx !== mergeJ);
     clusters.push(mergedCluster);
+    const newClusterIndex = clusters.length - 1;
 
-    // Update dendrogram nodes
-    dendrogramNodes[mergeI] = newNode;
-    dendrogramNodes.splice(mergeJ, 1);
+    // Remove old clusters from active set and add new one
+    activeClusters.delete(mergeI);
+    activeClusters.delete(mergeJ);
+    activeClusters.add(newClusterIndex);
   }
 
   steps.push({
@@ -163,14 +173,17 @@ export function agglomerativeClustering(points: Point[]) {
     description: 'Clustering complete - all points merged into one cluster',
     cluster1: [],
     cluster2: [],
-    mergedCluster: clusters[0]?.points || [],
+    mergedCluster: clusters[clusters.length - 1]?.points || [],
     distance: 0,
     action: 'complete',
   });
 
+  // Build dendrogram tree
+  const dendrogram = buildDendrogram(steps, points);
+
   return {
     steps,
-    dendrogram: dendrogramNodes[0] || null,
+    dendrogram,
     finalClusters: getFinalClusters(steps, points.length, 3), // Get 3-4 final clusters
   };
 }
@@ -244,9 +257,12 @@ export function divisiveClustering(points: Point[]) {
     action: 'complete',
   });
 
+  // Build dendrogram for divisive clustering
+  const dendrogram = buildDivisiveDendrogram(steps, points);
+
   return {
     steps,
-    dendrogram: null, // Divisive dendrograms are more complex to build
+    dendrogram,
     finalClusters: clusters.map(c => c.points),
   };
 }
@@ -374,4 +390,220 @@ function getFinalClusters(steps: MergeStep[], numPoints: number, targetClusters:
 
   // Convert to array format
   return Array.from(clusters.values()).map(cluster => Array.from(cluster));
+}
+
+// Build dendrogram tree for agglomerative clustering
+function buildDendrogram(steps: MergeStep[], points: Point[]): DendrogramNode | null {
+  if (steps.length === 0) return null;
+
+  // Create leaf nodes for each point
+  const leafNodes: DendrogramNode[] = points.map((p, idx) => ({
+    height: 0,
+    label: p.id,
+    indices: [idx],
+  }));
+
+  // Track which nodes are still active
+  const activeNodes = new Map<string, DendrogramNode>();
+  leafNodes.forEach((node, idx) => {
+    activeNodes.set(`leaf_${idx}`, node);
+  });
+
+  // Process merge steps to build the tree
+  for (let i = 1; i < steps.length - 1; i++) { // Skip first and last steps
+    const step = steps[i];
+    if (step.action === 'complete') continue;
+
+    // Find the nodes corresponding to the clusters being merged
+    let node1: DendrogramNode | null = null;
+    let node2: DendrogramNode | null = null;
+    let node1Key = '';
+    let node2Key = '';
+
+    // Search for nodes that contain the points from the clusters
+    for (const [key, node] of Array.from(activeNodes.entries())) {
+      if (node.indices && step.cluster1.length > 0) {
+        // Check if this node contains any point from cluster1
+        const hasCluster1Point = step.cluster1.some(pointIdx => node.indices?.includes(pointIdx));
+        if (hasCluster1Point && !node1) {
+          node1 = node;
+          node1Key = key;
+        }
+      }
+      if (node.indices && step.cluster2.length > 0) {
+        // Check if this node contains any point from cluster2
+        const hasCluster2Point = step.cluster2.some(pointIdx => node.indices?.includes(pointIdx));
+        if (hasCluster2Point && !node2) {
+          node2 = node;
+          node2Key = key;
+        }
+      }
+    }
+
+    if (node1 && node2 && node1Key !== node2Key) {
+      // Create new merged node
+      const mergedNode: DendrogramNode = {
+        left: node1,
+        right: node2,
+        height: step.distance,
+        indices: step.mergedCluster,
+      };
+
+      // Remove old nodes and add new one
+      activeNodes.delete(node1Key);
+      activeNodes.delete(node2Key);
+      activeNodes.set(`merge_${i}`, mergedNode);
+    }
+  }
+
+  // Return the root node (should be the only remaining node)
+  const rootNodes = Array.from(activeNodes.values());
+  const rootNode = rootNodes.length > 0 ? rootNodes[0] : null;
+  
+  // Ensure all points are represented in the tree
+  if (rootNode) {
+    const allPointIds = new Set<string>();
+    const collectAllLabels = (node: DendrogramNode) => {
+      if (node.label) {
+        allPointIds.add(node.label);
+      }
+      if (node.left) collectAllLabels(node.left);
+      if (node.right) collectAllLabels(node.right);
+    };
+    
+    collectAllLabels(rootNode);
+    
+    // If any points are missing, create a simple tree that includes them all
+    const missingPoints = points.filter(p => !allPointIds.has(p.id));
+    if (missingPoints.length > 0) {
+      // Create a simple balanced tree with all points
+      const allLeafNodes = points.map((p, idx) => ({
+        height: 0,
+        label: p.id,
+        indices: [idx],
+      }));
+      
+      return buildBalancedTree(allLeafNodes, 0);
+    }
+  }
+  
+  return rootNode;
+}
+
+// Helper function to build a balanced tree from leaf nodes
+function buildBalancedTree(leafNodes: DendrogramNode[], startHeight: number): DendrogramNode {
+  if (leafNodes.length === 1) {
+    return leafNodes[0];
+  }
+  
+  if (leafNodes.length === 2) {
+    return {
+      left: leafNodes[0],
+      right: leafNodes[1],
+      height: startHeight + 1,
+      indices: [...(leafNodes[0].indices || []), ...(leafNodes[1].indices || [])],
+    };
+  }
+  
+  const mid = Math.floor(leafNodes.length / 2);
+  const left = buildBalancedTree(leafNodes.slice(0, mid), startHeight + 1);
+  const right = buildBalancedTree(leafNodes.slice(mid), startHeight + 1);
+  
+  return {
+    left,
+    right,
+    height: startHeight + 1,
+    indices: [...(left.indices || []), ...(right.indices || [])],
+  };
+}
+
+// Build dendrogram tree for divisive clustering
+function buildDivisiveDendrogram(steps: MergeStep[], points: Point[]): DendrogramNode | null {
+  if (steps.length === 0) return null;
+
+  // Start with root node containing all points
+  const rootNode: DendrogramNode = {
+    height: 0,
+    indices: Array.from({ length: points.length }, (_, i) => i),
+  };
+
+  // Process division steps to build the tree
+  const nodeMap = new Map<string, DendrogramNode>();
+  nodeMap.set('root', rootNode);
+
+  for (let i = 1; i < steps.length - 1; i++) { // Skip first and last steps
+    const step = steps[i];
+    if (step.action === 'complete') continue;
+
+    // Find the node to split
+    const nodeToSplit = Array.from(nodeMap.values()).find(node => 
+      node.indices && 
+      step.mergedCluster.length > 0 && 
+      node.indices.includes(step.mergedCluster[0])
+    );
+
+    if (nodeToSplit) {
+      // Create child nodes
+      const leftNode: DendrogramNode = {
+        height: step.distance,
+        indices: step.cluster1,
+      };
+
+      const rightNode: DendrogramNode = {
+        height: step.distance,
+        indices: step.cluster2,
+      };
+
+      // Update the parent node
+      nodeToSplit.left = leftNode;
+      nodeToSplit.right = rightNode;
+      nodeToSplit.height = step.distance;
+
+      // Add child nodes to map
+      nodeMap.set(`left_${i}`, leftNode);
+      nodeMap.set(`right_${i}`, rightNode);
+    }
+  }
+
+  // Add leaf nodes for individual points
+  const addLeafNodes = (node: DendrogramNode) => {
+    if (node.indices && node.indices.length === 1) {
+      const pointIdx = node.indices[0];
+      node.label = points[pointIdx]?.id;
+      node.height = 0;
+    } else {
+      if (node.left) addLeafNodes(node.left);
+      if (node.right) addLeafNodes(node.right);
+    }
+  };
+
+  addLeafNodes(rootNode);
+  
+  // Ensure all points are represented as leaf nodes
+  const allPointIds = new Set<string>();
+  const collectLeafLabels = (node: DendrogramNode) => {
+    if (node.label) {
+      allPointIds.add(node.label);
+    } else {
+      if (node.left) collectLeafLabels(node.left);
+      if (node.right) collectLeafLabels(node.right);
+    }
+  };
+  
+  collectLeafLabels(rootNode);
+  
+  // If any points are missing, create a complete tree with all points
+  const missingPoints = points.filter(p => !allPointIds.has(p.id));
+  if (missingPoints.length > 0) {
+    // Create a simple balanced tree with all points
+    const allLeafNodes = points.map((p, idx) => ({
+      height: 0,
+      label: p.id,
+      indices: [idx],
+    }));
+    
+    return buildBalancedTree(allLeafNodes, 0);
+  }
+  
+  return rootNode;
 }

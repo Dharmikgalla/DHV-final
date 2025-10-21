@@ -6,6 +6,7 @@ interface DendrogramNode {
   height: number;
   label?: string;
   color?: string;
+  indices?: number[];
 }
 
 interface DendrogramProps {
@@ -15,9 +16,22 @@ interface DendrogramProps {
   colors: string[];
   cutLine?: number;
   onCutLineChange?: (height: number) => void;
+  currentStep: number;
+  totalSteps: number;
+  clusteringSteps: any[];
 }
 
-export function Dendrogram({ tree, currentHeight, labels, colors, cutLine, onCutLineChange }: DendrogramProps) {
+export function Dendrogram({ 
+  tree, 
+  currentHeight, 
+  labels, 
+  colors, 
+  cutLine, 
+  onCutLineChange,
+  currentStep,
+  totalSteps,
+  clusteringSteps
+}: DendrogramProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 400, height: 600 });
@@ -40,7 +54,7 @@ export function Dendrogram({ tree, currentHeight, labels, colors, cutLine, onCut
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !tree) return;
+    if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -54,97 +68,66 @@ export function Dendrogram({ tree, currentHeight, labels, colors, cutLine, onCut
 
     ctx.clearRect(0, 0, dimensions.width, dimensions.height);
 
-    // Calculate leaf positions
-    const leaves: string[] = [];
-    const getLeaves = (node: DendrogramNode): void => {
+    // Get all unique labels from the tree and ensure all input labels are included
+    const allLabels = new Set<string>();
+    const collectLabels = (node: DendrogramNode) => {
       if (node.label) {
-        leaves.push(node.label);
-      } else {
-        if (node.left) getLeaves(node.left);
-        if (node.right) getLeaves(node.right);
+        allLabels.add(node.label);
       }
+      if (node.left) collectLabels(node.left);
+      if (node.right) collectLabels(node.right);
     };
-    getLeaves(tree);
+    
+    if (tree) {
+      collectLabels(tree);
+    }
+    
+    // Add any missing labels
+    labels.forEach(label => allLabels.add(label));
+    
+    const sortedLabels = Array.from(allLabels).sort();
+    const leafSpacing = (dimensions.height - padding.top - padding.bottom) / Math.max(sortedLabels.length - 1, 1);
+
+    // Create a map of label to y position
+    const labelToY = new Map<string, number>();
+    sortedLabels.forEach((label, idx) => {
+      labelToY.set(label, padding.top + idx * leafSpacing);
+    });
 
     const maxHeight = getMaxHeight(tree);
-    const leafSpacing = (dimensions.height - padding.top - padding.bottom) / Math.max(leaves.length - 1, 1);
-
     const scaleX = (height: number) => {
       return padding.left + ((height / (maxHeight || 1)) * (dimensions.width - padding.left - padding.right));
     };
 
-    let leafIndex = 0;
-    const drawNode = (node: DendrogramNode, y: number): number => {
-      if (node.label) {
-        // Leaf node
-        const yPos = padding.top + leafIndex * leafSpacing;
-        leafIndex++;
+    // Draw leaf nodes and their horizontal lines
+    sortedLabels.forEach((label, idx) => {
+      const yPos = padding.top + idx * leafSpacing;
+      
+      // Draw label
+      ctx.fillStyle = 'hsl(var(--foreground))';
+      ctx.font = '12px JetBrains Mono';
+      ctx.textAlign = 'right';
+      ctx.fillText(label, padding.left - 10, yPos + 4);
 
-        // Draw label
-        ctx.fillStyle = node.color || 'hsl(var(--foreground))';
-        ctx.font = '12px JetBrains Mono';
-        ctx.textAlign = 'right';
-        ctx.fillText(node.label, padding.left - 10, yPos + 4);
+      // Draw horizontal line to axis
+      ctx.strokeStyle = 'hsl(var(--muted-foreground))';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(padding.left, yPos);
+      ctx.lineTo(scaleX(0), yPos);
+      ctx.stroke();
 
-        // Draw horizontal line to axis
-        ctx.strokeStyle = node.color || 'hsl(var(--muted-foreground))';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(padding.left, yPos);
-        ctx.lineTo(scaleX(0), yPos);
-        ctx.stroke();
+      // Draw node circle
+      ctx.fillStyle = 'hsl(var(--foreground))';
+      ctx.beginPath();
+      ctx.arc(padding.left, yPos, 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
 
-        // Draw node circle
-        ctx.fillStyle = node.color || 'hsl(var(--foreground))';
-        ctx.beginPath();
-        ctx.arc(padding.left, yPos, 3, 0, Math.PI * 2);
-        ctx.fill();
-
-        return yPos;
-      }
-
-      // Internal node
-      const leftY = node.left ? drawNode(node.left, y) : y;
-      const rightY = node.right ? drawNode(node.right, y + 1) : y;
-
-      const midY = (leftY + rightY) / 2;
-      const x = scaleX(node.height);
-
-      // Only draw if this merge has occurred based on currentHeight
-      if (node.height <= currentHeight) {
-        ctx.strokeStyle = 'hsl(var(--primary))';
-        ctx.lineWidth = 2;
-
-        // Draw vertical line connecting children
-        ctx.beginPath();
-        ctx.moveTo(x, leftY);
-        ctx.lineTo(x, rightY);
-        ctx.stroke();
-
-        // Draw horizontal lines to children
-        const childX = node.left ? scaleX(node.left.height) : padding.left;
-        ctx.beginPath();
-        ctx.moveTo(childX, leftY);
-        ctx.lineTo(x, leftY);
-        ctx.stroke();
-
-        const childX2 = node.right ? scaleX(node.right.height) : padding.left;
-        ctx.beginPath();
-        ctx.moveTo(childX2, rightY);
-        ctx.lineTo(x, rightY);
-        ctx.stroke();
-
-        // Draw merge node
-        ctx.fillStyle = 'hsl(var(--primary))';
-        ctx.beginPath();
-        ctx.arc(x, midY, 4, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      return midY;
-    };
-
-    drawNode(tree, 0);
+    // Draw progressive dendrogram based on current step
+    if (tree && clusteringSteps.length > 0) {
+      drawProgressiveDendrogram(ctx, tree, labelToY, scaleX, currentStep, clusteringSteps);
+    }
 
     // Draw axis
     ctx.strokeStyle = 'hsl(var(--foreground))';
@@ -160,26 +143,113 @@ export function Dendrogram({ tree, currentHeight, labels, colors, cutLine, onCut
     ctx.textAlign = 'center';
     ctx.fillText('Merge Distance', dimensions.width / 2, dimensions.height - 10);
 
-    // Draw cut line if provided
-    if (cutLine !== undefined) {
-      const cutX = scaleX(cutLine);
-      ctx.strokeStyle = 'hsl(var(--destructive))';
-      ctx.lineWidth = 3;
-      ctx.setLineDash([5, 5]);
-      ctx.beginPath();
-      ctx.moveTo(cutX, padding.top);
-      ctx.lineTo(cutX, dimensions.height - padding.bottom);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      
-      // Draw cut line label
-      ctx.fillStyle = 'hsl(var(--destructive))';
-      ctx.font = 'bold 12px Inter';
-      ctx.textAlign = 'left';
-      ctx.fillText(`Cut: ${cutLine.toFixed(2)}`, cutX + 5, padding.top + 15);
+    // Draw cut line
+    const effectiveCutLine = cutLine !== undefined ? cutLine : (tree?.height || 0) * 0.6;
+    const cutX = scaleX(effectiveCutLine);
+    ctx.strokeStyle = 'hsl(var(--destructive))';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(cutX, padding.top);
+    ctx.lineTo(cutX, dimensions.height - padding.bottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    
+    // Draw cut line label
+    ctx.fillStyle = 'hsl(var(--destructive))';
+    ctx.font = 'bold 12px Inter';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Cut: ${effectiveCutLine.toFixed(2)}`, cutX + 5, padding.top + 15);
+
+  }, [tree, currentHeight, dimensions, labels, colors, cutLine, currentStep, totalSteps, clusteringSteps]);
+
+  const drawProgressiveDendrogram = (
+    ctx: CanvasRenderingContext2D, 
+    node: DendrogramNode, 
+    labelToY: Map<string, number>, 
+    scaleX: (height: number) => number,
+    currentStep: number,
+    clusteringSteps: any[]
+  ) => {
+    if (!node) return;
+
+    // If this is a leaf node, we already drew it
+    if (node.label) return;
+
+    // Draw children first
+    if (node.left) {
+      drawProgressiveDendrogram(ctx, node.left, labelToY, scaleX, currentStep, clusteringSteps);
+    }
+    if (node.right) {
+      drawProgressiveDendrogram(ctx, node.right, labelToY, scaleX, currentStep, clusteringSteps);
     }
 
-  }, [tree, currentHeight, dimensions, labels, colors, cutLine]);
+    // Only draw this merge if it has occurred by the current step
+    const stepIndex = findStepForMerge(node, clusteringSteps);
+    if (stepIndex !== -1 && stepIndex < currentStep) {
+      const leftY = getNodeY(node.left, labelToY);
+      const rightY = getNodeY(node.right, labelToY);
+      const x = scaleX(node.height);
+      const midY = (leftY + rightY) / 2;
+
+      ctx.strokeStyle = 'hsl(var(--primary))';
+      ctx.lineWidth = 2;
+
+      // Draw vertical line connecting children
+      ctx.beginPath();
+      ctx.moveTo(x, leftY);
+      ctx.lineTo(x, rightY);
+      ctx.stroke();
+
+      // Draw horizontal lines to children
+      const childX = node.left ? scaleX(node.left.height) : padding.left;
+      ctx.beginPath();
+      ctx.moveTo(childX, leftY);
+      ctx.lineTo(x, leftY);
+      ctx.stroke();
+
+      const childX2 = node.right ? scaleX(node.right.height) : padding.left;
+      ctx.beginPath();
+      ctx.moveTo(childX2, rightY);
+      ctx.lineTo(x, rightY);
+      ctx.stroke();
+
+      // Draw merge node
+      ctx.fillStyle = 'hsl(var(--primary))';
+      ctx.beginPath();
+      ctx.arc(x, midY, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+
+  const findStepForMerge = (node: DendrogramNode, clusteringSteps: any[]): number => {
+    // Find which step corresponds to this merge
+    for (let i = 0; i < clusteringSteps.length; i++) {
+      const step = clusteringSteps[i];
+      if (step.action === 'connect' || step.action === 'merge') {
+        // Check if this step's merged cluster matches this node's indices
+        if (node.indices && step.mergedCluster && 
+            node.indices.length === step.mergedCluster.length &&
+            node.indices.every(idx => step.mergedCluster.includes(idx))) {
+          return i;
+        }
+      }
+    }
+    return -1;
+  };
+
+  const getNodeY = (node: DendrogramNode | undefined, labelToY: Map<string, number>): number => {
+    if (!node) return padding.top;
+    
+    if (node.label) {
+      return labelToY.get(node.label) || padding.top;
+    }
+    
+    // For internal nodes, calculate the midpoint of their children
+    const leftY = getNodeY(node.left, labelToY);
+    const rightY = getNodeY(node.right, labelToY);
+    return (leftY + rightY) / 2;
+  };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!onCutLineChange || !tree) return;
@@ -215,7 +285,8 @@ export function Dendrogram({ tree, currentHeight, labels, colors, cutLine, onCut
     setIsDragging(false);
   };
 
-  const getMaxHeight = (node: DendrogramNode): number => {
+  const getMaxHeight = (node: DendrogramNode | null): number => {
+    if (!node) return 0;
     if (!node.left && !node.right) return 0;
     const leftHeight = node.left ? getMaxHeight(node.left) : 0;
     const rightHeight = node.right ? getMaxHeight(node.right) : 0;
@@ -223,25 +294,27 @@ export function Dendrogram({ tree, currentHeight, labels, colors, cutLine, onCut
   };
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-card rounded-md border border-card-border border-l-4 border-l-primary/30">
+    <div ref={containerRef} className="w-full h-full bg-card rounded-md border border-card-border border-l-4 border-l-primary/30 overflow-hidden">
       <div className="p-4 border-b border-border">
         <h3 className="text-lg font-semibold">Dendrogram Tree</h3>
-        <p className="text-sm text-muted-foreground">Visual hierarchy of cluster merges</p>
+        <p className="text-sm text-muted-foreground">
+          Step {currentStep} of {totalSteps} - Progressive clustering visualization
+        </p>
       </div>
-      <div className="p-4">
-        <canvas 
-          ref={canvasRef} 
-          className="w-full cursor-crosshair" 
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-        />
-        {cutLine !== undefined && (
-          <div className="mt-2 text-sm text-muted-foreground">
-            Cut line at distance: {cutLine.toFixed(2)} - Click and drag on the dendrogram to adjust
+      <div className="p-4 h-full overflow-hidden">
+        <div className="relative w-full h-full">
+          <canvas 
+            ref={canvasRef} 
+            className="absolute inset-0 w-full h-full cursor-crosshair" 
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          />
+          <div className="absolute bottom-0 left-0 right-0 p-2 bg-background/80 backdrop-blur-sm text-sm text-muted-foreground">
+            Cut line at distance: {(cutLine !== undefined ? cutLine : (tree?.height || 0) * 0.6).toFixed(2)} - Click and drag on the dendrogram to adjust
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

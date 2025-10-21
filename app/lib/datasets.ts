@@ -8,11 +8,11 @@ export const medicalConfig: DatasetConfig = {
   xAxis: { label: 'Blood Pressure (Systolic)', key: 'Blood_Pressure_Sys' },
   yAxis: { label: 'Temperature (°F)', key: 'Temperature_F' },
   availableAxes: [
-    { label: 'Blood Pressure (Systolic)', key: 'Blood_Pressure_Sys', range: [100, 160] },
-    { label: 'Blood Pressure (Diastolic)', key: 'Blood_Pressure_Dia', range: [70, 100] },
-    { label: 'Temperature (°F)', key: 'Temperature_F', range: [97, 103] },
-    { label: 'Sugar Level (mg/dL)', key: 'Sugar_Level_mg_dL', range: [80, 200] },
-    { label: 'Age', key: 'Age', range: [20, 70] },
+    { label: 'Blood Pressure (Systolic)', key: 'Blood_Pressure_Sys', range: [115, 160] },
+    { label: 'Blood Pressure (Diastolic)', key: 'Blood_Pressure_Dia', range: [75, 100] },
+    { label: 'Temperature (°F)', key: 'Temperature_F', range: [97, 102.5] },
+    { label: 'Sugar Level (mg/dL)', key: 'Sugar_Level_mg_dL', range: [85, 190] },
+    { label: 'Age', key: 'Age', range: [20, 65] },
   ],
   tooltipFields: [
     { label: 'Age', key: 'Age', format: (v) => `${v} years` },
@@ -25,10 +25,13 @@ export const medicalConfig: DatasetConfig = {
     const avgTemp = stats.Temperature_F || 0;
     const avgBP = stats.Blood_Pressure_Sys || 0;
     const avgSugar = stats.Sugar_Level_mg_dL || 0;
+    const avgAge = stats.Age || 0;
 
     if (avgTemp > 100.5 && avgBP < 135) return 'Viral Infection Group';
     if (avgBP > 145 && avgSugar > 165) return 'Cardiac & Metabolic Risk';
     if (avgSugar > 150 && avgTemp < 99) return 'Metabolic Risk Group';
+    if (avgAge > 55 && avgBP > 140) return 'Elderly Hypertension';
+    if (avgTemp < 98.5 && avgSugar < 100) return 'Healthy Baseline';
     return 'Normal/Stable Group';
   },
   getStoryStep: (step: number, algorithm: 'agglomerative' | 'divisive') => {
@@ -70,9 +73,9 @@ export const crimeConfig: DatasetConfig = {
   xAxis: { label: 'Longitude', key: 'Longitude' },
   yAxis: { label: 'Latitude', key: 'Latitude' },
   availableAxes: [
-    { label: 'Longitude', key: 'Longitude', range: [19.0, 19.2] },
-    { label: 'Latitude', key: 'Latitude', range: [72.8, 73.0] },
-    { label: 'Severity Level', key: 'Severity_Level', range: [1, 5] },
+    { label: 'Longitude', key: 'Longitude', range: [75.0, 80.0] },
+    { label: 'Latitude', key: 'Latitude', range: [10.0, 13.5] },
+    { label: 'Severity Level', key: 'Severity_Level', range: [1, 8] },
   ],
   tooltipFields: [
     { label: 'Crime Type', key: 'Crime_Type' },
@@ -83,8 +86,13 @@ export const crimeConfig: DatasetConfig = {
   clusterColors: ['hsl(355, 85%, 50%)', 'hsl(30, 85%, 55%)', 'hsl(55, 75%, 60%)', 'hsl(210, 85%, 55%)'],
   getDiagnosis: (stats) => {
     const avgSeverity = stats.Severity_Level || 0;
-    if (avgSeverity >= 4.5) return 'High-Risk Crime Hotspot';
-    if (avgSeverity >= 3) return 'Medium-Risk Area';
+    const avgLat = stats.Latitude || 0;
+    const avgLon = stats.Longitude || 0;
+    
+    if (avgSeverity >= 6) return 'High-Risk Crime Hotspot';
+    if (avgSeverity >= 4 && avgSeverity < 6) return 'Medium-Risk Area';
+    if (avgLat > 12 && avgLon > 78) return 'Northern Crime Zone';
+    if (avgLat < 11 && avgLon < 76) return 'Southern Crime Zone';
     return 'Low-Risk Zone';
   },
   getStoryStep: (step: number, algorithm: 'agglomerative' | 'divisive') => {
@@ -126,10 +134,10 @@ export const customerConfig: DatasetConfig = {
   xAxis: { label: 'Annual Income ($k)', key: 'Annual_Income_kUSD' },
   yAxis: { label: 'Spending Score', key: 'Spending_Score' },
   availableAxes: [
-    { label: 'Annual Income ($k)', key: 'Annual_Income_kUSD', range: [10, 120] },
-    { label: 'Spending Score', key: 'Spending_Score', range: [0, 100] },
-    { label: 'Age', key: 'Age', range: [20, 70] },
-    { label: 'Loyalty Years', key: 'Loyalty_Years', range: [0, 12] },
+    { label: 'Annual Income ($k)', key: 'Annual_Income_kUSD', range: [15, 70] },
+    { label: 'Spending Score', key: 'Spending_Score', range: [20, 80] },
+    { label: 'Age', key: 'Age', range: [22, 50] },
+    { label: 'Loyalty Years', key: 'Loyalty_Years', range: [2, 10] },
   ],
   tooltipFields: [
     { label: 'Age', key: 'Age', format: (v) => `${v} years` },
@@ -141,10 +149,14 @@ export const customerConfig: DatasetConfig = {
   getDiagnosis: (stats) => {
     const avgIncome = stats.Annual_Income_kUSD || 0;
     const avgSpending = stats.Spending_Score || 0;
+    const avgAge = stats.Age || 0;
+    const avgLoyalty = stats.Loyalty_Years || 0;
 
-    if (avgIncome > 80 && avgSpending < 45) return 'Luxury Potential Segment';
-    if (avgSpending > 75 && avgIncome < 50) return 'Fashion Forward Enthusiasts';
-    if (avgIncome > 60 && avgSpending > 60) return 'High-Value Customers';
+    if (avgIncome > 60 && avgSpending < 40) return 'High-Income Conservative Shoppers';
+    if (avgSpending > 70 && avgIncome < 40) return 'Fashion Forward Enthusiasts';
+    if (avgIncome > 50 && avgSpending > 60) return 'High-Value Customers';
+    if (avgAge > 45 && avgLoyalty > 5) return 'Loyal Mature Customers';
+    if (avgAge < 30 && avgSpending > 60) return 'Young High Spenders';
     return 'Value-Conscious Shoppers';
   },
   getStoryStep: (step: number, algorithm: 'agglomerative' | 'divisive') => {
@@ -184,7 +196,7 @@ export const DATASET_CONFIGS: Record<string, DatasetConfig> = {
   customer: customerConfig,
 };
 
-// Load CSV data
+// Load CSV data - Medical Patients Dataset
 export const medicalData: MedicalPatient[] = [
   { Patient_ID: 'P1', Age: 25, Temperature_F: 98.6, Blood_Pressure_Sys: 120, Blood_Pressure_Dia: 80, Sugar_Level_mg_dL: 90, Symptoms: 'Mild fever, fatigue' },
   { Patient_ID: 'P2', Age: 27, Temperature_F: 99.1, Blood_Pressure_Sys: 118, Blood_Pressure_Dia: 78, Sugar_Level_mg_dL: 95, Symptoms: 'Mild fever, cough' },
@@ -197,49 +209,29 @@ export const medicalData: MedicalPatient[] = [
 ];
 
 export const crimeData: CrimeSite[] = [
-  { Crime_ID: 'C1', Latitude: 19.07, Longitude: 72.87, Crime_Type: 'Theft', Time_of_Day: 'Night', Severity_Level: 3, Reported_By: 'Citizen' },
-  { Crime_ID: 'C2', Latitude: 19.05, Longitude: 72.85, Crime_Type: 'Assault', Time_of_Day: 'Evening', Severity_Level: 2, Reported_By: 'Police Patrol' },
-  { Crime_ID: 'C3', Latitude: 19.09, Longitude: 72.84, Crime_Type: 'Burglary', Time_of_Day: 'Morning', Severity_Level: 4, Reported_By: 'Citizen' },
-  { Crime_ID: 'C4', Latitude: 19.11, Longitude: 72.89, Crime_Type: 'Theft', Time_of_Day: 'Afternoon', Severity_Level: 3, Reported_By: 'Citizen' },
-  { Crime_ID: 'C5', Latitude: 19.12, Longitude: 72.91, Crime_Type: 'Robbery', Time_of_Day: 'Night', Severity_Level: 5, Reported_By: 'Police Patrol' },
-  { Crime_ID: 'C6', Latitude: 19.13, Longitude: 72.92, Crime_Type: 'Assault', Time_of_Day: 'Night', Severity_Level: 2, Reported_By: 'Citizen' },
-  { Crime_ID: 'C7', Latitude: 19.08, Longitude: 72.83, Crime_Type: 'Theft', Time_of_Day: 'Evening', Severity_Level: 3, Reported_By: 'Citizen' },
-  { Crime_ID: 'C8', Latitude: 19.06, Longitude: 72.86, Crime_Type: 'Fraud', Time_of_Day: 'Morning', Severity_Level: 1, Reported_By: 'Online' },
-  { Crime_ID: 'C9', Latitude: 19.04, Longitude: 72.88, Crime_Type: 'Theft', Time_of_Day: 'Afternoon', Severity_Level: 2, Reported_By: 'Citizen' },
-  { Crime_ID: 'C10', Latitude: 19.1, Longitude: 72.9, Crime_Type: 'Murder', Time_of_Day: 'Night', Severity_Level: 5, Reported_By: 'Police Patrol' },
-  { Crime_ID: 'C11', Latitude: 19.15, Longitude: 72.93, Crime_Type: 'Burglary', Time_of_Day: 'Evening', Severity_Level: 4, Reported_By: 'Online' },
-  { Crime_ID: 'C12', Latitude: 19.14, Longitude: 72.94, Crime_Type: 'Assault', Time_of_Day: 'Morning', Severity_Level: 3, Reported_By: 'Citizen' },
-  { Crime_ID: 'C13', Latitude: 19.16, Longitude: 72.95, Crime_Type: 'Robbery', Time_of_Day: 'Night', Severity_Level: 5, Reported_By: 'Police Patrol' },
-  { Crime_ID: 'C14', Latitude: 19.03, Longitude: 72.82, Crime_Type: 'Fraud', Time_of_Day: 'Afternoon', Severity_Level: 2, Reported_By: 'Citizen' },
-  { Crime_ID: 'C15', Latitude: 19.02, Longitude: 72.81, Crime_Type: 'Theft', Time_of_Day: 'Morning', Severity_Level: 1, Reported_By: 'Online' },
-  { Crime_ID: 'C16', Latitude: 19.17, Longitude: 72.96, Crime_Type: 'Assault', Time_of_Day: 'Evening', Severity_Level: 3, Reported_By: 'Citizen' },
-  { Crime_ID: 'C17', Latitude: 19.18, Longitude: 72.97, Crime_Type: 'Murder', Time_of_Day: 'Night', Severity_Level: 5, Reported_By: 'Police Patrol' },
-  { Crime_ID: 'C18', Latitude: 19.01, Longitude: 72.8, Crime_Type: 'Fraud', Time_of_Day: 'Afternoon', Severity_Level: 1, Reported_By: 'Online' },
-  { Crime_ID: 'C19', Latitude: 19.19, Longitude: 72.98, Crime_Type: 'Burglary', Time_of_Day: 'Night', Severity_Level: 4, Reported_By: 'Citizen' },
-  { Crime_ID: 'C20', Latitude: 19.2, Longitude: 72.99, Crime_Type: 'Robbery', Time_of_Day: 'Evening', Severity_Level: 5, Reported_By: 'Police Patrol' },
+  // Updated crime dataset with new coordinates
+  { Crime_ID: 'C1', Latitude: 10.1, Longitude: 75.2, Crime_Type: 'Theft', Time_of_Day: 'Unknown', Severity_Level: 3, Reported_By: 'Unknown' },
+  { Crime_ID: 'C2', Latitude: 10.5, Longitude: 76.1, Crime_Type: 'Assault', Time_of_Day: 'Unknown', Severity_Level: 6, Reported_By: 'Unknown' },
+  { Crime_ID: 'C3', Latitude: 11.2, Longitude: 77.3, Crime_Type: 'Burglary', Time_of_Day: 'Unknown', Severity_Level: 4, Reported_By: 'Unknown' },
+  { Crime_ID: 'C4', Latitude: 10.8, Longitude: 75.8, Crime_Type: 'Theft', Time_of_Day: 'Unknown', Severity_Level: 2, Reported_By: 'Unknown' },
+  { Crime_ID: 'C5', Latitude: 12.1, Longitude: 78.2, Crime_Type: 'Fraud', Time_of_Day: 'Unknown', Severity_Level: 5, Reported_By: 'Unknown' },
+  { Crime_ID: 'C6', Latitude: 11.5, Longitude: 76.9, Crime_Type: 'Assault', Time_of_Day: 'Unknown', Severity_Level: 7, Reported_By: 'Unknown' },
+  { Crime_ID: 'C7', Latitude: 13.0, Longitude: 79.5, Crime_Type: 'Robbery', Time_of_Day: 'Unknown', Severity_Level: 8, Reported_By: 'Unknown' },
+  { Crime_ID: 'C8', Latitude: 12.4, Longitude: 78.8, Crime_Type: 'Theft', Time_of_Day: 'Unknown', Severity_Level: 3, Reported_By: 'Unknown' },
+  { Crime_ID: 'C9', Latitude: 11.0, Longitude: 77.0, Crime_Type: 'Fraud', Time_of_Day: 'Unknown', Severity_Level: 4, Reported_By: 'Unknown' },
 ];
 
 export const customerData: Customer[] = [
-  { Customer_ID: 'CU1', Age: 22, Annual_Income_kUSD: 15, Spending_Score: 82, Loyalty_Years: 1, Preferred_Category: 'Fashion' },
-  { Customer_ID: 'CU2', Age: 45, Annual_Income_kUSD: 35, Spending_Score: 55, Loyalty_Years: 5, Preferred_Category: 'Electronics' },
-  { Customer_ID: 'CU3', Age: 35, Annual_Income_kUSD: 60, Spending_Score: 70, Loyalty_Years: 3, Preferred_Category: 'Groceries' },
-  { Customer_ID: 'CU4', Age: 28, Annual_Income_kUSD: 20, Spending_Score: 90, Loyalty_Years: 2, Preferred_Category: 'Fashion' },
-  { Customer_ID: 'CU5', Age: 52, Annual_Income_kUSD: 85, Spending_Score: 40, Loyalty_Years: 7, Preferred_Category: 'Luxury' },
-  { Customer_ID: 'CU6', Age: 41, Annual_Income_kUSD: 70, Spending_Score: 60, Loyalty_Years: 4, Preferred_Category: 'Groceries' },
-  { Customer_ID: 'CU7', Age: 30, Annual_Income_kUSD: 40, Spending_Score: 75, Loyalty_Years: 3, Preferred_Category: 'Fashion' },
-  { Customer_ID: 'CU8', Age: 48, Annual_Income_kUSD: 55, Spending_Score: 65, Loyalty_Years: 6, Preferred_Category: 'Electronics' },
-  { Customer_ID: 'CU9', Age: 25, Annual_Income_kUSD: 18, Spending_Score: 85, Loyalty_Years: 1, Preferred_Category: 'Fashion' },
-  { Customer_ID: 'CU10', Age: 33, Annual_Income_kUSD: 25, Spending_Score: 88, Loyalty_Years: 2, Preferred_Category: 'Groceries' },
-  { Customer_ID: 'CU11', Age: 55, Annual_Income_kUSD: 95, Spending_Score: 35, Loyalty_Years: 8, Preferred_Category: 'Luxury' },
-  { Customer_ID: 'CU12', Age: 60, Annual_Income_kUSD: 100, Spending_Score: 20, Loyalty_Years: 10, Preferred_Category: 'Luxury' },
-  { Customer_ID: 'CU13', Age: 27, Annual_Income_kUSD: 22, Spending_Score: 92, Loyalty_Years: 1, Preferred_Category: 'Fashion' },
-  { Customer_ID: 'CU14', Age: 31, Annual_Income_kUSD: 30, Spending_Score: 78, Loyalty_Years: 3, Preferred_Category: 'Fashion' },
-  { Customer_ID: 'CU15', Age: 44, Annual_Income_kUSD: 65, Spending_Score: 68, Loyalty_Years: 5, Preferred_Category: 'Electronics' },
-  { Customer_ID: 'CU16', Age: 38, Annual_Income_kUSD: 45, Spending_Score: 72, Loyalty_Years: 4, Preferred_Category: 'Groceries' },
-  { Customer_ID: 'CU17', Age: 50, Annual_Income_kUSD: 80, Spending_Score: 45, Loyalty_Years: 7, Preferred_Category: 'Luxury' },
-  { Customer_ID: 'CU18', Age: 62, Annual_Income_kUSD: 110, Spending_Score: 25, Loyalty_Years: 9, Preferred_Category: 'Luxury' },
-  { Customer_ID: 'CU19', Age: 40, Annual_Income_kUSD: 50, Spending_Score: 60, Loyalty_Years: 6, Preferred_Category: 'Electronics' },
-  { Customer_ID: 'CU20', Age: 29, Annual_Income_kUSD: 28, Spending_Score: 80, Loyalty_Years: 2, Preferred_Category: 'Fashion' },
+  // Updated from customer_segmentation_small.csv (Annual_Income_k$→Annual_Income_kUSD, Purchase_Frequency→Loyalty_Years)
+  { Customer_ID: 'CU1', Age: 22, Annual_Income_kUSD: 15, Spending_Score: 80, Loyalty_Years: 10, Preferred_Category: 'Unknown' },
+  { Customer_ID: 'CU2', Age: 25, Annual_Income_kUSD: 20, Spending_Score: 75, Loyalty_Years: 9, Preferred_Category: 'Unknown' },
+  { Customer_ID: 'CU3', Age: 28, Annual_Income_kUSD: 35, Spending_Score: 60, Loyalty_Years: 8, Preferred_Category: 'Unknown' },
+  { Customer_ID: 'CU4', Age: 35, Annual_Income_kUSD: 40, Spending_Score: 50, Loyalty_Years: 6, Preferred_Category: 'Unknown' },
+  { Customer_ID: 'CU5', Age: 40, Annual_Income_kUSD: 55, Spending_Score: 40, Loyalty_Years: 4, Preferred_Category: 'Unknown' },
+  { Customer_ID: 'CU6', Age: 45, Annual_Income_kUSD: 60, Spending_Score: 30, Loyalty_Years: 3, Preferred_Category: 'Unknown' },
+  { Customer_ID: 'CU7', Age: 50, Annual_Income_kUSD: 65, Spending_Score: 20, Loyalty_Years: 2, Preferred_Category: 'Unknown' },
+  { Customer_ID: 'CU8', Age: 30, Annual_Income_kUSD: 25, Spending_Score: 70, Loyalty_Years: 8, Preferred_Category: 'Unknown' },
+  { Customer_ID: 'CU9', Age: 38, Annual_Income_kUSD: 50, Spending_Score: 45, Loyalty_Years: 5, Preferred_Category: 'Unknown' },
 ];
 
 export function convertToDataPoints(dataset: 'medical' | 'crime' | 'customer'): DataPoint[] {
@@ -273,25 +265,49 @@ export function convertToDataPoints(dataset: 'medical' | 'crime' | 'customer'): 
 export function convertToDataPointsWithAxes(dataset: 'medical' | 'crime' | 'customer', xAxisKey: string, yAxisKey: string): DataPoint[] {
   switch (dataset) {
     case 'medical':
-      return medicalData.map((patient) => ({
-        id: patient.Patient_ID,
-        x: (patient as any)[xAxisKey],
-        y: (patient as any)[yAxisKey],
-        data: patient,
-      }));
+      return medicalData.map((patient) => {
+        const x = (patient as any)[xAxisKey];
+        const y = (patient as any)[yAxisKey];
+        if (typeof x !== 'number' || typeof y !== 'number') {
+          console.warn(`Invalid coordinates for ${patient.Patient_ID}: x=${x}, y=${y}`);
+          return null;
+        }
+        return {
+          id: patient.Patient_ID,
+          x: x,
+          y: y,
+          data: patient,
+        };
+      }).filter(Boolean) as DataPoint[];
     case 'crime':
-      return crimeData.map((crime) => ({
-        id: crime.Crime_ID,
-        x: (crime as any)[xAxisKey],
-        y: (crime as any)[yAxisKey],
-        data: crime,
-      }));
+      return crimeData.map((crime) => {
+        const x = (crime as any)[xAxisKey];
+        const y = (crime as any)[yAxisKey];
+        if (typeof x !== 'number' || typeof y !== 'number') {
+          console.warn(`Invalid coordinates for ${crime.Crime_ID}: x=${x}, y=${y}`);
+          return null;
+        }
+        return {
+          id: crime.Crime_ID,
+          x: x,
+          y: y,
+          data: crime,
+        };
+      }).filter(Boolean) as DataPoint[];
     case 'customer':
-      return customerData.map((customer) => ({
-        id: customer.Customer_ID,
-        x: (customer as any)[xAxisKey],
-        y: (customer as any)[yAxisKey],
-        data: customer,
-      }));
+      return customerData.map((customer) => {
+        const x = (customer as any)[xAxisKey];
+        const y = (customer as any)[yAxisKey];
+        if (typeof x !== 'number' || typeof y !== 'number') {
+          console.warn(`Invalid coordinates for ${customer.Customer_ID}: x=${x}, y=${y}`);
+          return null;
+        }
+        return {
+          id: customer.Customer_ID,
+          x: x,
+          y: y,
+          data: customer,
+        };
+      }).filter(Boolean) as DataPoint[];
   }
 }

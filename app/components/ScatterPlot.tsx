@@ -73,14 +73,14 @@ export function ScatterPlot({
     const yMin = Math.min(...yValues);
     const yMax = Math.max(...yValues);
 
-    const xRange = xMax - xMin || 1;
-    const yRange = yMax - yMin || 1;
+    const xRangeSize = xMax - xMin || 1;
+    const yRangeSize = yMax - yMin || 1;
 
     return {
-      xMin: xMin - xRange * 0.1,
-      xMax: xMax + xRange * 0.1,
-      yMin: yMin - yRange * 0.1,
-      yMax: yMax + yRange * 0.1,
+      xMin: xMin - xRangeSize * 0.1,
+      xMax: xMax + xRangeSize * 0.1,
+      yMin: yMin - yRangeSize * 0.1,
+      yMax: yMax + yRangeSize * 0.1,
     };
   };
 
@@ -91,7 +91,8 @@ export function ScatterPlot({
 
   const scaleY = (y: number) => {
     const scales = getScales();
-    return dimensions.height - padding.bottom - ((y - scales.yMin) / (scales.yMax - scales.yMin)) * (dimensions.height - padding.top - padding.bottom);
+    // Invert Y-axis: higher Y values should be at the top (lower pixel values)
+    return padding.top + ((scales.yMax - y) / (scales.yMax - scales.yMin)) * (dimensions.height - padding.top - padding.bottom);
   };
 
   const inverseScaleX = (px: number) => {
@@ -101,7 +102,8 @@ export function ScatterPlot({
 
   const inverseScaleY = (px: number) => {
     const scales = getScales();
-    return scales.yMin + ((dimensions.height - padding.bottom - px) / (dimensions.height - padding.top - padding.bottom)) * (scales.yMax - scales.yMin);
+    // Invert Y-axis: higher pixel values should map to lower Y values
+    return scales.yMax - ((px - padding.top) / (dimensions.height - padding.top - padding.bottom)) * (scales.yMax - scales.yMin);
   };
 
   useEffect(() => {
@@ -142,42 +144,44 @@ export function ScatterPlot({
 
     ctx.globalAlpha = 1;
 
-    // Draw clusters
-    clusters.forEach((cluster, idx) => {
-      if (cluster.pointIndices.length === 0) return;
+    // Draw clusters whenever clusters are available (supports cut-line mode too)
+    if (clusters.length > 0) {
+      clusters.forEach((cluster, idx) => {
+        if (cluster.pointIndices.length === 0) return;
 
-      const points = cluster.pointIndices.map(i => dataPoints[i]).filter(Boolean);
-      if (points.length === 0) return;
+        const points = cluster.pointIndices.map(i => dataPoints[i]).filter(Boolean);
+        if (points.length === 0) return;
 
-      const xs = points.map(p => scaleX(p.x));
-      const ys = points.map(p => scaleY(p.y));
+        const xs = points.map(p => scaleX(p.x));
+        const ys = points.map(p => scaleY(p.y));
 
-      const centerX = xs.reduce((a, b) => a + b, 0) / xs.length;
-      const centerY = ys.reduce((a, b) => a + b, 0) / ys.length;
+        const centerX = xs.reduce((a, b) => a + b, 0) / xs.length;
+        const centerY = ys.reduce((a, b) => a + b, 0) / ys.length;
 
-      const maxDist = Math.max(
-        ...xs.map((x, i) => Math.sqrt((x - centerX) ** 2 + (ys[i] - centerY) ** 2))
-      );
+        const maxDist = Math.max(
+          ...xs.map((x, i) => Math.sqrt((x - centerX) ** 2 + (ys[i] - centerY) ** 2))
+        );
 
-      const radius = maxDist + 30;
+        const radius = maxDist + 30;
 
-      ctx.fillStyle = cluster.color.replace('hsl', 'hsla').replace(')', ', 0.08)');
-      ctx.strokeStyle = cluster.color;
-      ctx.lineWidth = 3;
+        ctx.fillStyle = cluster.color.replace('hsl', 'hsla').replace(')', ', 0.08)');
+        ctx.strokeStyle = cluster.color;
+        ctx.lineWidth = 3;
 
-      if (hoveredCluster === idx) {
-        ctx.fillStyle = cluster.color.replace('hsl', 'hsla').replace(')', ', 0.15)');
-        ctx.shadowColor = cluster.color;
-        ctx.shadowBlur = 15;
-      }
+        if (hoveredCluster === idx) {
+          ctx.fillStyle = cluster.color.replace('hsl', 'hsla').replace(')', ', 0.15)');
+          ctx.shadowColor = cluster.color;
+          ctx.shadowBlur = 15;
+        }
 
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
 
-      ctx.shadowBlur = 0;
-    });
+        ctx.shadowBlur = 0;
+      });
+    }
 
     // Draw connections
     ctx.strokeStyle = 'hsl(var(--primary))';
@@ -209,11 +213,53 @@ export function ScatterPlot({
     ctx.lineTo(dimensions.width - padding.right, dimensions.height - padding.bottom);
     ctx.stroke();
 
+    // Draw axis tick marks and labels
+    const scales = getScales();
+    ctx.fillStyle = 'hsl(var(--foreground))';
+    ctx.font = '12px Inter';
+    ctx.textAlign = 'center';
+    
+    // X-axis ticks
+    for (let i = 0; i <= 5; i++) {
+      const x = padding.left + (i / 5) * (dimensions.width - padding.left - padding.right);
+      const value = scales.xMin + (i / 5) * (scales.xMax - scales.xMin);
+      
+      // Draw tick mark
+      ctx.strokeStyle = 'hsl(var(--foreground))';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, dimensions.height - padding.bottom);
+      ctx.lineTo(x, dimensions.height - padding.bottom + 5);
+      ctx.stroke();
+      
+      // Draw tick label
+      ctx.fillText(value.toFixed(1), x, dimensions.height - padding.bottom + 18);
+    }
+    
+    // Y-axis ticks
+    ctx.textAlign = 'right';
+    for (let i = 0; i <= 5; i++) {
+      const y = padding.top + (i / 5) * (dimensions.height - padding.top - padding.bottom);
+      // Since we inverted the Y scaling, we need to invert the value calculation too
+      const value = scales.yMax - (i / 5) * (scales.yMax - scales.yMin);
+      
+      // Draw tick mark
+      ctx.strokeStyle = 'hsl(var(--foreground))';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(padding.left, y);
+      ctx.lineTo(padding.left - 5, y);
+      ctx.stroke();
+      
+      // Draw tick label
+      ctx.fillText(value.toFixed(1), padding.left - 10, y + 4);
+    }
+
     // Draw axis labels
     ctx.fillStyle = 'hsl(var(--foreground))';
     ctx.font = '14px Inter';
     ctx.textAlign = 'center';
-    ctx.fillText(xLabel, dimensions.width / 2, dimensions.height - 20);
+    ctx.fillText(xLabel, dimensions.width / 2, dimensions.height - 5);
 
     ctx.save();
     ctx.translate(20, dimensions.height / 2);

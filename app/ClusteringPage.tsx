@@ -41,14 +41,23 @@ export default function ClusteringPage() {
   // Initialize axes when dataset changes
   useEffect(() => {
     if (config.availableAxes && config.availableAxes.length > 0) {
-      if (!xAxis || !config.availableAxes.find(axis => axis.key === xAxis)) {
-        setXAxis(config.xAxis.key);
-      }
-      if (!yAxis || !config.availableAxes.find(axis => axis.key === yAxis)) {
-        setYAxis(config.yAxis.key);
-      }
+      // Always reset to default axes when dataset changes
+      setXAxis(config.xAxis.key);
+      setYAxis(config.yAxis.key);
+      
+      // Reset all state
+      setDataPoints([]);
+      setClusters([]);
+      setConnections([]);
+      setCurrentStep(0);
+      setDendrogramTree(null);
+      setCurrentHeight(0);
+      setIsPlaying(false);
+      setCutLine(undefined);
+      setClusteringSteps([]);
+      setFinalClusters([]);
     }
-  }, [dataset, config, xAxis, yAxis]);
+  }, [dataset, config]);
 
   // Clustering mutation
   const clusterMutation = useMutation({
@@ -87,6 +96,8 @@ export default function ClusteringPage() {
     setCurrentHeight(0);
     setIsPlaying(false);
     setCutLine(undefined);
+    setClusteringSteps([]);
+    setFinalClusters([]);
 
     // Run clustering
     clusterMutation.mutate({
@@ -96,37 +107,13 @@ export default function ClusteringPage() {
     });
   }, [dataset, algorithm, xAxis, yAxis]);
 
-  // Update visualization based on current step
+  // Update clusters based on cut line
   useEffect(() => {
-    if (dataPoints.length === 0 || clusteringSteps.length === 0) return;
-
-    const updateVisualization = () => {
-      if (currentStep === 0) {
-        setClusters([]);
-        setConnections([]);
-        setCurrentHeight(0);
-        return;
-      }
-
-      const step = clusteringSteps[Math.min(currentStep - 1, clusteringSteps.length - 1)];
-      if (!step) return;
-
-      // Update connections
-      const newConnections: Array<[number, number]> = [];
-      for (let i = 0; i < currentStep && i < clusteringSteps.length; i++) {
-        const s = clusteringSteps[i];
-        if (s.action === 'connect' || s.action === 'merge') {
-          // Add connection between first points of each cluster
-          if (s.cluster1.length > 0 && s.cluster2.length > 0) {
-            newConnections.push([s.cluster1[0], s.cluster2[0]]);
-          }
-        }
-      }
-      setConnections(newConnections);
-
-      // Update clusters based on final clusters
-      if (finalClusters.length > 0) {
-        const newClusters: ClusterInfo[] = finalClusters.map((indices, idx) => {
+    if (cutLine !== undefined && dendrogramTree && dataPoints.length > 0) {
+      const clustersAtCut = getClustersAtCut(dendrogramTree, cutLine, dataPoints.length);
+      
+      if (clustersAtCut.length > 0) {
+        const newClusters: ClusterInfo[] = clustersAtCut.map((indices, idx) => {
           const clusterPoints = indices.map(i => dataPoints[i]).filter(Boolean);
           const stats: Record<string, number> = {};
 
@@ -150,15 +137,17 @@ export default function ClusteringPage() {
         });
 
         setClusters(newClusters);
+        // Clear connections when using cut line
+        setConnections([]);
       }
+    } else if (cutLine === undefined) {
+      // Reset to normal clustering when cut line is removed
+      setClusters([]);
+      setConnections([]);
+    }
+  }, [cutLine, dendrogramTree, dataPoints, config]);
 
-      setCurrentHeight(step.distance || 0);
-    };
-
-    updateVisualization();
-  }, [currentStep, dataPoints, clusteringSteps, finalClusters, config]);
-
-  // Auto-play functionality
+  // Auto-play functionality (slow, clear steps for understanding)
   useEffect(() => {
     if (isPlaying && currentStep < totalSteps) {
       playIntervalRef.current = setInterval(() => {
@@ -169,7 +158,7 @@ export default function ClusteringPage() {
           }
           return prev + 1;
         });
-      }, 1500);
+      }, 2500);
     } else {
       if (playIntervalRef.current) {
         clearInterval(playIntervalRef.current);
@@ -263,6 +252,164 @@ export default function ClusteringPage() {
 
   const handleMouseMove = (e: React.MouseEvent) => {
     setMousePos({ x: e.clientX, y: e.clientY });
+  };
+
+  // Get clusters at a specific cut line height
+  const getClustersAtCut = (tree: any, cutHeight: number, numPoints: number): number[][] => {
+    if (!tree) return [];
+
+    const clusters: number[][] = [];
+
+    const collectClusters = (node: any) => {
+      if (!node) return;
+
+      // If this node's merge height is greater than cut, descend further
+      if (node.height !== undefined && node.height > cutHeight) {
+        collectClusters(node.left);
+        collectClusters(node.right);
+        return;
+      }
+
+      // Otherwise, take this subtree as a cluster
+      if (Array.isArray(node.indices)) {
+        clusters.push([...node.indices]);
+      } else if (node.label && node.indices && node.indices.length === 1) {
+        clusters.push([node.indices[0]]);
+      }
+    };
+
+    collectClusters(tree);
+
+    // Ensure coverage of all points and uniqueness
+    const seen = new Set<number>();
+    const uniqueClusters: number[][] = [];
+    clusters.forEach(arr => {
+      const uniq = Array.from(new Set(arr)).filter(i => i >= 0 && i < numPoints);
+      uniq.forEach(i => seen.add(i));
+      if (uniq.length > 0) uniqueClusters.push(uniq);
+    });
+
+    for (let i = 0; i < numPoints; i++) {
+      if (!seen.has(i)) uniqueClusters.push([i]);
+    }
+
+    return uniqueClusters;
+  };
+
+  // Update visualization based on current step (only when cut line is not set)
+  useEffect(() => {
+    if (cutLine !== undefined) return; // Skip if cut line is active
+    
+    if (dataPoints.length === 0 || clusteringSteps.length === 0) return;
+
+    const updateVisualization = () => {
+      if (currentStep === 0) {
+        setClusters([]);
+        setConnections([]);
+        setCurrentHeight(0);
+        return;
+      }
+
+      // Show connections first, then clusters
+      const newConnections: Array<[number, number]> = [];
+      const newClusters: ClusterInfo[] = [];
+      
+      // Build connections and clusters step by step
+      for (let i = 0; i < currentStep && i < clusteringSteps.length; i++) {
+        const s = clusteringSteps[i];
+        if (s.action === 'connect' || s.action === 'merge') {
+          // Add connection between first points of each cluster
+          if (s.cluster1.length > 0 && s.cluster2.length > 0) {
+            newConnections.push([s.cluster1[0], s.cluster2[0]]);
+          }
+        }
+      }
+      
+      setConnections(newConnections);
+
+      // Only show clusters after we have some connections
+      if (currentStep > 1 && finalClusters.length > 0) {
+        // Calculate clusters based on current step
+        const clustersAtStep = getClustersAtStep(currentStep, clusteringSteps, dataPoints.length);
+        
+        if (clustersAtStep.length > 0) {
+          const stepClusters: ClusterInfo[] = clustersAtStep.map((indices, idx) => {
+            const clusterPoints = indices.map(i => dataPoints[i]).filter(Boolean);
+            const stats: Record<string, number> = {};
+
+            // Calculate average stats
+            config.tooltipFields.forEach((field) => {
+              const values = clusterPoints.map(p => (p.data as any)[field.key]).filter(v => typeof v === 'number');
+              if (values.length > 0) {
+                stats[field.key] = values.reduce((a, b) => a + b, 0) / values.length;
+              }
+            });
+
+            const diagnosis = config.getDiagnosis?.(stats);
+
+            return {
+              id: idx,
+              pointIndices: indices,
+              color: config.clusterColors[idx % config.clusterColors.length],
+              stats,
+              diagnosis,
+            };
+          });
+
+          setClusters(stepClusters);
+        }
+      } else {
+        // Clear clusters if no connections yet
+        setClusters([]);
+      }
+
+      const step = clusteringSteps[Math.min(currentStep - 1, clusteringSteps.length - 1)];
+      setCurrentHeight(step?.distance || 0);
+    };
+
+    updateVisualization();
+  }, [currentStep, dataPoints, clusteringSteps, finalClusters, config, cutLine]);
+
+  // Get clusters at a specific step
+  const getClustersAtStep = (step: number, steps: any[], numPoints: number): number[][] => {
+    if (step <= 1) return [];
+
+    // Track which points belong to which cluster
+    const pointToCluster = new Map<number, number>();
+    const clusters = new Map<number, Set<number>>();
+
+    // Initialize each point as its own cluster
+    for (let i = 0; i < numPoints; i++) {
+      pointToCluster.set(i, i);
+      clusters.set(i, new Set([i]));
+    }
+
+    // Apply merges up to the current step
+    for (let i = 1; i < Math.min(step, steps.length - 1); i++) {
+      const stepData = steps[i];
+      if (stepData.action === 'complete') continue;
+
+      const cluster1Id = pointToCluster.get(stepData.cluster1[0]);
+      const cluster2Id = pointToCluster.get(stepData.cluster2[0]);
+
+      if (cluster1Id === undefined || cluster2Id === undefined) continue;
+
+      const cluster1Points = clusters.get(cluster1Id);
+      const cluster2Points = clusters.get(cluster2Id);
+
+      if (!cluster1Points || !cluster2Points) continue;
+
+      // Merge cluster2 into cluster1
+      cluster2Points.forEach(point => {
+        cluster1Points.add(point);
+        pointToCluster.set(point, cluster1Id);
+      });
+
+      clusters.delete(cluster2Id);
+    }
+
+    // Convert to array format
+    return Array.from(clusters.values()).map(cluster => Array.from(cluster));
   };
 
   return (
@@ -392,6 +539,9 @@ export default function ClusteringPage() {
                 })}
                 cutLine={cutLine}
                 onCutLineChange={setCutLine}
+                currentStep={currentStep}
+                totalSteps={totalSteps}
+                clusteringSteps={clusteringSteps}
               />
             </div>
           </div>
