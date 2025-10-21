@@ -96,7 +96,9 @@ export interface DatasetConfig {
   icon: string;
   xAxis: { label: string; key: string };
   yAxis: { label: string; key: string };
-  tooltipFields: Array<{ label: string; key: string; format?: (val: number) => string }>;
+  availableAxes?: Array<{ label: string; key: string; range: [number, number] }>;
+  tooltipFields: Array<{ label: string; key: string; format?: (val: number, data?: any) => string }>;
   clusterColors: string[];
   getDiagnosis?: (stats: Record<string, number>) => string;
+  getStoryStep?: (step: number, algorithm: 'agglomerative' | 'divisive') => string;
 }
