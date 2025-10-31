@@ -5,7 +5,7 @@ import { DataPointTooltip } from '@/components/DataPointTooltip';
 import { ClusterTooltip } from '@/components/ClusterTooltip';
 import { ControlPanel } from '@/components/ControlPanel';
 import { StoryDisplay } from '@/components/StoryDisplay';
-import { convertToDataPoints, convertToDataPointsWithAxes, DATASET_CONFIGS } from '@/lib/datasets';
+import { convertToDataPoints, convertToDataPointsWithAxes, DATASET_CONFIGS, getClusterName } from '@/lib/datasets';
 import { DataPoint, ClusterInfo } from '@shared/schema';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation } from '@tanstack/react-query';
@@ -126,6 +126,7 @@ export default function ClusteringPage() {
           });
 
           const diagnosis = config.getDiagnosis?.(stats);
+          const name = getClusterName(dataset, idx, clustersAtCut.length, stats, dataPoints, indices);
 
           return {
             id: idx,
@@ -133,6 +134,7 @@ export default function ClusteringPage() {
             color: config.clusterColors[idx % config.clusterColors.length],
             stats,
             diagnosis,
+            name,
           };
         });
 
@@ -145,7 +147,7 @@ export default function ClusteringPage() {
       setClusters([]);
       setConnections([]);
     }
-  }, [cutLine, dendrogramTree, dataPoints, config]);
+  }, [cutLine, dendrogramTree, dataPoints, config, dataset]);
 
   // Auto-play functionality (slow, clear steps for understanding)
   useEffect(() => {
@@ -346,6 +348,7 @@ export default function ClusteringPage() {
             });
 
             const diagnosis = config.getDiagnosis?.(stats);
+            const name = getClusterName(dataset, idx, clustersAtStep.length, stats, dataPoints, indices);
 
             return {
               id: idx,
@@ -353,6 +356,7 @@ export default function ClusteringPage() {
               color: config.clusterColors[idx % config.clusterColors.length],
               stats,
               diagnosis,
+              name,
             };
           });
 
@@ -460,7 +464,7 @@ export default function ClusteringPage() {
         />
 
         {/* Main Visualization Area */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1.5fr,1fr] gap-6">
+        <div className="space-y-8">
           {/* Scatter Plot */}
           <div className="relative">
             <div className="mb-4">
@@ -519,16 +523,22 @@ export default function ClusteringPage() {
             )}
           </div>
 
-          {/* Dendrogram */}
-          <div>
-            <div className="mb-4">
+          {/* Dendrogram - Full Width Below Scatter Plot */}
+          <div className="w-full space-y-4">
+            <div>
               <h2 className="text-2xl font-semibold mb-1">Dendrogram</h2>
               <p className="text-sm text-muted-foreground">
-                Hierarchical tree showing cluster relationships
+                Hierarchical tree showing cluster relationships - Click and drag to adjust the cut line
               </p>
             </div>
 
-            <div className="h-[600px]">
+            {/* Dendrogram Tree Block */}
+            <div 
+              className="w-full bg-card rounded-lg shadow-sm border border-border"
+              style={{ 
+                height: Math.max(600, dataPoints.length * 60 + 180) + 'px' 
+              }}
+            >
               <Dendrogram
                 tree={dendrogramTree}
                 currentHeight={currentHeight}
@@ -543,6 +553,39 @@ export default function ClusteringPage() {
                 totalSteps={totalSteps}
                 clusteringSteps={clusteringSteps}
               />
+            </div>
+
+            {/* Separate Cut Line Information Block */}
+            <div className="w-full bg-card rounded-lg shadow-sm border border-border p-6">
+              <div className="flex items-center gap-4">
+                <div className="flex-shrink-0">
+                  <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold mb-1">Cut Line Control</h3>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Click and drag on the dendrogram above to adjust the cut line position. The cut line determines how many clusters are formed.
+                  </p>
+                  <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-muted-foreground">Current Distance:</span>
+                      <span className="text-xl font-bold text-destructive">
+                        {(cutLine !== undefined ? cutLine : (dendrogramTree?.height || 0) * 0.6).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-muted-foreground">Clusters Formed:</span>
+                      <span className="text-xl font-bold text-primary">
+                        {clusters.length || 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

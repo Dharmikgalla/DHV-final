@@ -65,6 +65,7 @@ export interface ClusterInfo {
   color: string;
   stats: Record<string, number>;
   diagnosis?: string;
+  name?: string;
 }
 
 // Clustering Request/Response

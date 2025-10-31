@@ -20,21 +20,30 @@ export function ClusterTooltip({ cluster, datasetType, position }: ClusterToolti
         transform: 'translateY(-100%)',
       }}
     >
-      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border">
-        <div
-          className="w-4 h-4 rounded-full"
-          style={{ backgroundColor: cluster.color }}
-        />
-        <Layers className="w-4 h-4 text-primary" />
-        <span className="font-semibold">Cluster {cluster.id + 1}</span>
-        <span className="text-xs text-muted-foreground ml-auto">
-          {cluster.pointIndices.length} {cluster.pointIndices.length === 1 ? 'point' : 'points'}
-        </span>
+      <div className="mb-3 pb-2 border-b border-border">
+        <div className="flex items-center gap-2 mb-2">
+          <div
+            className="w-4 h-4 rounded-full"
+            style={{ backgroundColor: cluster.color }}
+          />
+          <Layers className="w-4 h-4 text-primary" />
+          <span className="text-xs text-muted-foreground ml-auto">
+            {cluster.pointIndices.length} {cluster.pointIndices.length === 1 ? 'point' : 'points'}
+          </span>
+        </div>
+        {cluster.name && (
+          <h3 className="font-bold text-base mb-1" style={{ color: cluster.color }}>
+            {cluster.name}
+          </h3>
+        )}
+        {!cluster.name && (
+          <span className="font-semibold">Cluster {cluster.id + 1}</span>
+        )}
       </div>
 
       <div className="space-y-2 mb-3">
         <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-          Average Statistics
+          Cluster {cluster.id + 1} - Average Statistics
         </h4>
         {Object.entries(cluster.stats).map(([key, value]) => (
           <div key={key} className="flex justify-between gap-4 text-sm">

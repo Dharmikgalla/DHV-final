@@ -20,7 +20,7 @@ export const medicalConfig: DatasetConfig = {
     { label: 'BP (Sys/Dia)', key: 'Blood_Pressure_Sys', format: (v, data: any) => `${v}/${data.Blood_Pressure_Dia}` },
     { label: 'Sugar Level', key: 'Sugar_Level_mg_dL', format: (v) => `${v} mg/dL` },
   ],
-  clusterColors: ['hsl(350, 75%, 60%)', 'hsl(220, 75%, 60%)', 'hsl(160, 70%, 55%)', 'hsl(140, 60%, 55%)'],
+  clusterColors: ['hsl(140, 65%, 50%)', 'hsl(48, 90%, 55%)', 'hsl(0, 75%, 55%)', 'hsl(220, 75%, 60%)'],
   getDiagnosis: (stats) => {
     const avgTemp = stats.Temperature_F || 0;
     const avgBP = stats.Blood_Pressure_Sys || 0;
@@ -310,4 +310,312 @@ export function convertToDataPointsWithAxes(dataset: 'medical' | 'crime' | 'cust
         };
       }).filter(Boolean) as DataPoint[];
   }
+}
+
+// Dynamic cluster naming based on data analysis
+export function getClusterName(
+  dataset: 'medical' | 'crime' | 'customer',
+  clusterIndex: number,
+  totalClusters: number,
+  stats: Record<string, number>,
+  dataPoints: DataPoint[],
+  clusterIndices: number[]
+): string {
+  if (dataset === 'medical') {
+    return getMedicalClusterName(clusterIndex, totalClusters, stats, dataPoints, clusterIndices);
+  } else if (dataset === 'crime') {
+    return getCrimeClusterName(clusterIndex, totalClusters, stats, dataPoints, clusterIndices);
+  } else if (dataset === 'customer') {
+    return getCustomerClusterName(clusterIndex, totalClusters, stats, dataPoints, clusterIndices);
+  }
+  return `Cluster ${clusterIndex + 1}`;
+}
+
+// Medical cluster naming based on health patterns
+function getMedicalClusterName(
+  clusterIndex: number,
+  totalClusters: number,
+  stats: Record<string, number>,
+  dataPoints: DataPoint[],
+  clusterIndices: number[]
+): string {
+  const avgTemp = stats.Temperature_F || 0;
+  const avgBPSys = stats.Blood_Pressure_Sys || 0;
+  const avgSugar = stats.Sugar_Level_mg_dL || 0;
+  const avgAge = stats.Age || 0;
+  
+  // Analyze cluster characteristics
+  const highTemp = avgTemp > 100.5;
+  const mildFever = avgTemp >= 99 && avgTemp <= 100.5;
+  const normalTemp = avgTemp < 99;
+  const highBP = avgBPSys > 145;
+  const moderateBP = avgBPSys >= 135 && avgBPSys <= 145;
+  const normalBP = avgBPSys < 135;
+  const highSugar = avgSugar > 160;
+  const moderateSugar = avgSugar >= 130 && avgSugar <= 160;
+  const normalSugar = avgSugar < 130;
+  const elderly = avgAge > 55;
+  
+  // Different names based on number of clusters (cut length)
+  if (totalClusters === 1) {
+    // Final merged cluster - all patients in one group
+    return 'Mixed Symptoms Group';
+  } else if (totalClusters === 2) {
+    // Two broad groups: Metabolic/Diabetic Risk vs Normal/Stable Group
+    if ((highBP && highSugar) || (moderateBP && moderateSugar) || highSugar) {
+      return 'Metabolic/Diabetic Risk';
+    }
+    return 'Normal/Stable Group';
+  } else if (totalClusters === 3) {
+    // Three main health categories
+    // Green cluster (index 0): P1, P2 - young with mild fever
+    // Yellow cluster (index 1): P3, P4, P5 - mixed mild viral and metabolic
+    // Red cluster (index 2): P6, P7, P8 - high fever or high BP+sugar
+    
+    if (highTemp && highBP && highSugar) {
+      return 'Severe Condition';
+    }
+    if (highTemp && avgTemp >= 101 && !highBP && !highSugar) {
+      return 'Mild Viral Infection';
+    }
+    if (mildFever && (moderateBP || moderateSugar)) {
+      return 'Mild Viral and Metabolic Risk';
+    }
+    if (normalTemp && normalBP && normalSugar && avgAge < 35) {
+      return 'Normal/Stable Group';
+    }
+    if ((moderateBP || highBP) && (moderateSugar || highSugar)) {
+      return 'Mild Viral and Metabolic Risk';
+    }
+    return 'Moderate Condition';
+  } else if (totalClusters === 4) {
+    // Four detailed categories
+    // Red cluster: Mild Viral Infection (high temp, low BP/sugar)
+    // Green cluster: Metabolic Risk (high BP and/or high sugar, normal temp)
+    
+    if (highTemp && avgTemp >= 101 && normalBP && normalSugar) {
+      return 'Mild Viral Infection';
+    }
+    if ((highBP || moderateBP) && (highSugar || moderateSugar) && normalTemp) {
+      return 'Metabolic Risk';
+    }
+    if (normalTemp && normalBP && normalSugar && avgAge < 35) {
+      return 'Normal/Stable Group';
+    }
+    if (mildFever && normalBP) {
+      return 'Mild Fever Group';
+    }
+    return `Patient Group ${clusterIndex + 1}`;
+  } else if (totalClusters >= 5) {
+    // More granular classification
+    if (highTemp && avgTemp > 101.5) {
+      return 'Acute Fever Cases';
+    }
+    if (mildFever && normalBP) {
+      return 'Mild Fever Group';
+    }
+    if (highBP && highSugar && elderly) {
+      return 'Cardiac & Metabolic Risk';
+    }
+    if (highBP && !highSugar) {
+      return 'Hypertension Only';
+    }
+    if (highSugar && !highBP && normalTemp) {
+      return 'Diabetes Management';
+    }
+    if (normalTemp && normalBP && normalSugar) {
+      return 'Baseline Healthy';
+    }
+    return `Clinical Group ${clusterIndex + 1}`;
+  }
+  
+  return `Cluster ${clusterIndex + 1}`;
+}
+
+// Crime cluster naming based on location and severity
+function getCrimeClusterName(
+  clusterIndex: number,
+  totalClusters: number,
+  stats: Record<string, number>,
+  dataPoints: DataPoint[],
+  clusterIndices: number[]
+): string {
+  const avgSeverity = stats.Severity_Level || 0;
+  const avgLat = stats.Latitude || 0;
+  const avgLon = stats.Longitude || 0;
+  
+  // Get crime types in this cluster
+  const crimeTypes = clusterIndices.map(i => {
+    const point = dataPoints[i];
+    return (point.data as CrimeSite).Crime_Type;
+  });
+  const dominantCrimeType = crimeTypes.length > 0 ? crimeTypes.reduce((a, b) => 
+    crimeTypes.filter(v => v === a).length >= crimeTypes.filter(v => v === b).length ? a : b
+  ) : '';
+  
+  const highSeverity = avgSeverity >= 6;
+  const moderateSeverity = avgSeverity >= 4 && avgSeverity < 6;
+  const lowSeverity = avgSeverity < 4;
+  
+  // Geographic classification
+  const northern = avgLat > 11.5;
+  const central = avgLat >= 10.5 && avgLat <= 11.5;
+  const southern = avgLat < 10.5;
+  const eastern = avgLon > 77.5;
+  const western = avgLon < 76.5;
+  
+  if (totalClusters === 2) {
+    if (highSeverity) {
+      return 'High-Risk Crime Zone';
+    }
+    return 'Low-Risk Crime Zone';
+  } else if (totalClusters === 3) {
+    if (highSeverity) {
+      return 'High-Risk Crime Hotspot';
+    }
+    if (moderateSeverity) {
+      return 'Moderate-Risk Area';
+    }
+    if (lowSeverity) {
+      return 'Low-Activity Zone';
+    }
+    return `Crime Zone ${clusterIndex + 1}`;
+  } else if (totalClusters === 4) {
+    // Geographic + severity
+    if (northern && highSeverity) {
+      return 'Northern Hotspot';
+    }
+    if (central && moderateSeverity) {
+      return 'Downtown Crime Belt';
+    }
+    if (southern && lowSeverity) {
+      return 'Peripheral Low Activity';
+    }
+    if (eastern) {
+      return 'Eastern Suburban Zone';
+    }
+    return `Crime Area ${clusterIndex + 1}`;
+  } else if (totalClusters >= 5) {
+    // More specific classification
+    if (highSeverity && dominantCrimeType === 'Robbery') {
+      return 'Armed Robbery Hotspot';
+    }
+    if (highSeverity && (dominantCrimeType === 'Assault' || dominantCrimeType === 'Murder')) {
+      return 'Violent Crime Zone';
+    }
+    if (moderateSeverity && dominantCrimeType === 'Burglary') {
+      return 'Property Crime Area';
+    }
+    if (moderateSeverity && dominantCrimeType === 'Theft') {
+      return 'Theft Cluster';
+    }
+    if (lowSeverity) {
+      return 'Minor Incidents Area';
+    }
+    
+    // Geographic specificity
+    if (northern && eastern) {
+      return 'Northeast Sector';
+    }
+    if (northern && western) {
+      return 'Northwest Sector';
+    }
+    if (southern && eastern) {
+      return 'Southeast Sector';
+    }
+    if (southern && western) {
+      return 'Southwest Sector';
+    }
+    
+    return `Crime Sector ${clusterIndex + 1}`;
+  }
+  
+  return `Cluster ${clusterIndex + 1}`;
+}
+
+// Customer cluster naming based on spending behavior
+function getCustomerClusterName(
+  clusterIndex: number,
+  totalClusters: number,
+  stats: Record<string, number>,
+  dataPoints: DataPoint[],
+  clusterIndices: number[]
+): string {
+  const avgIncome = stats.Annual_Income_kUSD || 0;
+  const avgSpending = stats.Spending_Score || 0;
+  const avgAge = stats.Age || 0;
+  const avgLoyalty = stats.Loyalty_Years || 0;
+  
+  const highIncome = avgIncome > 55;
+  const moderateIncome = avgIncome >= 35 && avgIncome <= 55;
+  const lowIncome = avgIncome < 35;
+  
+  const highSpending = avgSpending > 65;
+  const moderateSpending = avgSpending >= 45 && avgSpending <= 65;
+  const lowSpending = avgSpending < 45;
+  
+  const young = avgAge < 30;
+  const middleAged = avgAge >= 30 && avgAge < 45;
+  const mature = avgAge >= 45;
+  
+  const highLoyalty = avgLoyalty > 7;
+  const moderateLoyalty = avgLoyalty >= 5 && avgLoyalty <= 7;
+  
+  if (totalClusters === 2) {
+    if (highSpending) {
+      return 'High-Value Customers';
+    }
+    return 'Budget Customers';
+  } else if (totalClusters === 3) {
+    if (highIncome && highSpending) {
+      return 'Premium Loyal Customers';
+    }
+    if (moderateIncome && moderateSpending) {
+      return 'Mid-Spending Regulars';
+    }
+    if (lowIncome || lowSpending) {
+      return 'Budget Shoppers';
+    }
+    return `Customer Segment ${clusterIndex + 1}`;
+  } else if (totalClusters === 4) {
+    if (young && highSpending) {
+      return 'Young Spenders';
+    }
+    if (middleAged && moderateSpending) {
+      return 'Family-Oriented Buyers';
+    }
+    if (highIncome && lowSpending) {
+      return 'High-Income Occasional';
+    }
+    if (lowIncome && lowSpending) {
+      return 'Low-Income Rare Buyers';
+    }
+    return `Buyer Group ${clusterIndex + 1}`;
+  } else if (totalClusters >= 5) {
+    // Very specific segments
+    if (young && highSpending && lowIncome) {
+      return 'Fashion Forward Youth';
+    }
+    if (highIncome && highSpending && highLoyalty) {
+      return 'VIP Luxury Buyers';
+    }
+    if (highIncome && lowSpending) {
+      return 'Conservative Savers';
+    }
+    if (mature && highLoyalty) {
+      return 'Loyal Mature Customers';
+    }
+    if (middleAged && moderateIncome && moderateSpending) {
+      return 'Mainstream Shoppers';
+    }
+    if (lowIncome && highSpending) {
+      return 'Aspirational Spenders';
+    }
+    if (lowIncome && lowSpending) {
+      return 'Bargain Hunters';
+    }
+    return `Market Segment ${clusterIndex + 1}`;
+  }
+  
+  return `Cluster ${clusterIndex + 1}`;
 }

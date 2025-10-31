@@ -37,20 +37,31 @@ export function Dendrogram({
   const [dimensions, setDimensions] = useState({ width: 400, height: 600 });
   const [isDragging, setIsDragging] = useState(false);
 
-  const padding = { top: 20, right: 20, bottom: 40, left: 80 };
+  const padding = { top: 50, right: 100, bottom: 60, left: 120 };
 
   useEffect(() => {
     const updateDimensions = () => {
       if (containerRef.current) {
-        const { width, height } = containerRef.current.getBoundingClientRect();
-        setDimensions({ width, height });
+        const rect = containerRef.current.getBoundingClientRect();
+        // Use actual canvas container dimensions (excluding padding and borders)
+        setDimensions({ 
+          width: Math.max(rect.width - 16, 500), // Account for padding
+          height: Math.max(rect.height - 100, 500) // Account for header
+        });
       }
     };
 
     updateDimensions();
+    // Small delay to ensure container has rendered
+    const timer = setTimeout(updateDimensions, 100);
+    const timer2 = setTimeout(updateDimensions, 500); // Extra delay for layout
     window.addEventListener('resize', updateDimensions);
-    return () => window.removeEventListener('resize', updateDimensions);
-  }, []);
+    return () => {
+      window.removeEventListener('resize', updateDimensions);
+      clearTimeout(timer);
+      clearTimeout(timer2);
+    };
+  }, [labels.length]); // Re-calculate when number of labels changes
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -68,50 +79,76 @@ export function Dendrogram({
 
     ctx.clearRect(0, 0, dimensions.width, dimensions.height);
 
-    // Get all unique labels from the tree and ensure all input labels are included
-    const allLabels = new Set<string>();
-    const collectLabels = (node: DendrogramNode) => {
+    // Get labels in dendrogram order (left-to-right traversal for better clustering visualization)
+    const orderedLabels: string[] = [];
+    
+    const collectLabelsInOrder = (node: DendrogramNode) => {
+      if (!node) return;
+      
+      // Leaf node - add its label
       if (node.label) {
-        allLabels.add(node.label);
+        orderedLabels.push(node.label);
+        return;
       }
-      if (node.left) collectLabels(node.left);
-      if (node.right) collectLabels(node.right);
+      
+      // Internal node - traverse left then right
+      if (node.left) collectLabelsInOrder(node.left);
+      if (node.right) collectLabelsInOrder(node.right);
     };
     
     if (tree) {
-      collectLabels(tree);
+      collectLabelsInOrder(tree);
     }
     
-    // Add any missing labels
-    labels.forEach(label => allLabels.add(label));
+    // Ensure all input labels are included (in case some are missing from tree)
+    const labelsSet = new Set(orderedLabels);
+    const missingLabels = labels.filter(label => !labelsSet.has(label)).sort();
+    const sortedLabels = [...orderedLabels, ...missingLabels];
     
-    const sortedLabels = Array.from(allLabels).sort();
-    const leafSpacing = (dimensions.height - padding.top - padding.bottom) / Math.max(sortedLabels.length - 1, 1);
+    // Calculate optimal spacing for labels to fit within container
+    const availableHeight = dimensions.height - padding.top - padding.bottom;
+    const minSpacing = 35; // Increased from 20 to 35 for better visibility
+    const maxSpacing = 80; // Increased from 50 to 80 for generous spacing
+    const calculatedSpacing = Math.max(sortedLabels.length - 1, 1) > 0 
+      ? availableHeight / Math.max(sortedLabels.length - 1, 1)
+      : availableHeight;
+    const leafSpacing = Math.max(minSpacing, Math.min(maxSpacing, calculatedSpacing));
 
-    // Create a map of label to y position
+    // Create a map of label to y position - ensure they fit within bounds
     const labelToY = new Map<string, number>();
+    const totalHeight = (sortedLabels.length - 1) * leafSpacing;
+    const startY = padding.top + Math.max(0, (availableHeight - totalHeight) / 2);
+    
     sortedLabels.forEach((label, idx) => {
-      labelToY.set(label, padding.top + idx * leafSpacing);
+      const yPos = startY + idx * leafSpacing;
+      // Clamp within bounds
+      const clampedY = Math.max(padding.top, Math.min(dimensions.height - padding.bottom, yPos));
+      labelToY.set(label, clampedY);
     });
 
     const maxHeight = getMaxHeight(tree);
     const scaleX = (height: number) => {
-      return padding.left + ((height / (maxHeight || 1)) * (dimensions.width - padding.left - padding.right));
+      // Ensure we don't exceed the right boundary
+      const availableWidth = dimensions.width - padding.left - padding.right;
+      const scaledValue = (height / (maxHeight || 1)) * availableWidth;
+      return padding.left + Math.min(scaledValue, availableWidth);
     };
 
     // Draw leaf nodes and their horizontal lines
-    sortedLabels.forEach((label, idx) => {
-      const yPos = padding.top + idx * leafSpacing;
+    sortedLabels.forEach((label) => {
+      const yPos = labelToY.get(label);
+      if (yPos === undefined) return;
       
-      // Draw label
+      // Draw label with better visibility
       ctx.fillStyle = 'hsl(var(--foreground))';
       ctx.font = '12px JetBrains Mono';
       ctx.textAlign = 'right';
-      ctx.fillText(label, padding.left - 10, yPos + 4);
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, padding.left - 12, yPos);
 
       // Draw horizontal line to axis
-      ctx.strokeStyle = 'hsl(var(--muted-foreground))';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'hsl(var(--border))';
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(padding.left, yPos);
       ctx.lineTo(scaleX(0), yPos);
@@ -139,13 +176,14 @@ export function Dendrogram({
 
     // Draw axis label
     ctx.fillStyle = 'hsl(var(--foreground))';
-    ctx.font = '12px Inter';
+    ctx.font = '11px Inter';
     ctx.textAlign = 'center';
-    ctx.fillText('Merge Distance', dimensions.width / 2, dimensions.height - 10);
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('Merge Distance', dimensions.width / 2, dimensions.height - 5);
 
-    // Draw cut line
+    // Draw cut line (ensure it stays within bounds)
     const effectiveCutLine = cutLine !== undefined ? cutLine : (tree?.height || 0) * 0.6;
-    const cutX = scaleX(effectiveCutLine);
+    const cutX = Math.min(scaleX(effectiveCutLine), dimensions.width - padding.right);
     ctx.strokeStyle = 'hsl(var(--destructive))';
     ctx.lineWidth = 3;
     ctx.setLineDash([5, 5]);
@@ -155,11 +193,12 @@ export function Dendrogram({
     ctx.stroke();
     ctx.setLineDash([]);
     
-    // Draw cut line label
+    // Draw cut line label (ensure it doesn't overflow)
     ctx.fillStyle = 'hsl(var(--destructive))';
-    ctx.font = 'bold 12px Inter';
+    ctx.font = 'bold 11px Inter';
     ctx.textAlign = 'left';
-    ctx.fillText(`Cut: ${effectiveCutLine.toFixed(2)}`, cutX + 5, padding.top + 15);
+    const labelX = Math.min(cutX + 5, dimensions.width - padding.right - 60);
+    ctx.fillText(`Cut: ${effectiveCutLine.toFixed(2)}`, labelX, padding.top + 15);
 
   }, [tree, currentHeight, dimensions, labels, colors, cutLine, currentStep, totalSteps, clusteringSteps]);
 
@@ -294,27 +333,29 @@ export function Dendrogram({
   };
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-card rounded-md border border-card-border border-l-4 border-l-primary/30 overflow-hidden">
-      <div className="p-4 border-b border-border">
-        <h3 className="text-lg font-semibold">Dendrogram Tree</h3>
-        <p className="text-sm text-muted-foreground">
-          Step {currentStep} of {totalSteps} - Progressive clustering visualization
-        </p>
-      </div>
-      <div className="p-4 h-full overflow-hidden">
-        <div className="relative w-full h-full">
-          <canvas 
-            ref={canvasRef} 
-            className="absolute inset-0 w-full h-full cursor-crosshair" 
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-          />
-          <div className="absolute bottom-0 left-0 right-0 p-2 bg-background/80 backdrop-blur-sm text-sm text-muted-foreground">
-            Cut line at distance: {(cutLine !== undefined ? cutLine : (tree?.height || 0) * 0.6).toFixed(2)} - Click and drag on the dendrogram to adjust
+    <div ref={containerRef} className="w-full h-full overflow-hidden flex flex-col">
+      <div className="px-6 py-4 border-b border-border flex-shrink-0 bg-muted/30">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold">Dendrogram Tree</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Step {currentStep} of {totalSteps} - Progressive clustering visualization
+            </p>
+          </div>
+          <div className="text-sm text-muted-foreground">
+            <span className="font-medium">{labels.length}</span> data points
           </div>
         </div>
+      </div>
+      <div className="flex-1 p-8 min-h-0 overflow-hidden bg-background">
+        <canvas 
+          ref={canvasRef} 
+          className="w-full h-full cursor-crosshair block" 
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+        />
       </div>
     </div>
   );

@@ -29,7 +29,6 @@
     "baseUrl": ".",
     "types": [
       "node",
-      "vite/client",
       "next"
     ],
     "paths": {
@@ -38,6 +37,12 @@
       ],
       "@shared/*": [
         "./shared/*"
+      ],
+      "@components/*": [
+        "./app/components/*"
+      ],
+      "@dendrogram/*": [
+        "./app/dendrogram/*"
       ]
     },
     "allowJs": true,

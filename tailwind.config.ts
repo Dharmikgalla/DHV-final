@@ -75,13 +75,39 @@ export default {
         "sidebar-accent": {
           DEFAULT: "hsl(var(--sidebar-accent) / <alpha-value>)",
           foreground: "hsl(var(--sidebar-accent-foreground) / <alpha-value>)",
-          border: "var(--sidebar-accent-border)"
+          border: "var(--sidebar-accent-border)",
+          // Add transparency and overflow utility for better dendogram visibility
+          background: "rgba(var(--sidebar-accent-rgb), 0.95)",
+          overflow: "visible"
         },
         status: {
-          online: "rgb(34 197 94)",
-          away: "rgb(245 158 11)",
-          busy: "rgb(239 68 68)",
-          offline: "rgb(156 163 175)",
+          online: {
+            DEFAULT: "rgb(34 197 94)", // green
+            border: "rgba(34, 197, 94, 0.7)",
+            background: "rgba(34, 197, 94, 0.08)"
+          },
+          away: {
+            DEFAULT: "rgb(245 158 11)", // yellow
+            border: "rgba(245, 158, 11, 0.7)",
+            background: "rgba(245, 158, 11, 0.08)"
+          },
+          busy: {
+            DEFAULT: "rgb(239 68 68)", // red
+            border: "rgba(239, 68, 68, 0.7)",
+            background: "rgba(239, 68, 68, 0.08)"
+          },
+          offline: {
+            DEFAULT: "rgb(156 163 175)", // gray
+            border: "rgba(156, 163, 175, 0.7)",
+            background: "rgba(156, 163, 175, 0.03)"
+          },
+          dendrogram: {
+            line: "rgb(17 24 39)", // Highly visible deep gray for dendrogram lines
+            lineAccent: "rgb(59 130 246)", // Accent blue for highlights/cuts
+            background: "rgba(255,255,255,0.95)", // subtle background overlay for contrast
+            hover: "rgba(59, 130, 246, 0.16)", // On hover lines or clusters
+            selected: "rgba(34, 197, 94, 0.24)", // For selected cluster/branch
+          },
         },
       },
       fontFamily: {

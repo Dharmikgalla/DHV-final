@@ -146,11 +146,12 @@ export function ScatterPlot({
 
     // Draw clusters whenever clusters are available (supports cut-line mode too)
     if (clusters.length > 0) {
-      clusters.forEach((cluster, idx) => {
-        if (cluster.pointIndices.length === 0) return;
+      // Calculate initial radii for all clusters
+      const clusterData = clusters.map((cluster, idx) => {
+        if (cluster.pointIndices.length === 0) return null;
 
         const points = cluster.pointIndices.map(i => dataPoints[i]).filter(Boolean);
-        if (points.length === 0) return;
+        if (points.length === 0) return null;
 
         const xs = points.map(p => scaleX(p.x));
         const ys = points.map(p => scaleY(p.y));
@@ -162,8 +163,54 @@ export function ScatterPlot({
           ...xs.map((x, i) => Math.sqrt((x - centerX) ** 2 + (ys[i] - centerY) ** 2))
         );
 
-        const radius = maxDist + 30;
+        // Calculate minimum required radius to contain all points with generous buffer
+        const minRequiredRadius = maxDist + 30; // Increased buffer from 20 to 30
+        // Add extra space for single points and small clusters
+        const sizeBonus = points.length === 1 ? 15 : points.length === 2 ? 10 : 5;
+        const initialRadius = minRequiredRadius + sizeBonus;
 
+        return {
+          idx,
+          centerX,
+          centerY,
+          radius: initialRadius,
+          minRequiredRadius, // Store this to prevent shrinking below it
+          cluster
+        };
+      }).filter(Boolean) as Array<{
+        idx: number;
+        centerX: number;
+        centerY: number;
+        radius: number;
+        minRequiredRadius: number;
+        cluster: ClusterInfo;
+      }>;
+
+      // Prevent overlaps by adjusting radii, but never shrink below minimum required
+      for (let i = 0; i < clusterData.length; i++) {
+        for (let j = i + 1; j < clusterData.length; j++) {
+          const c1 = clusterData[i];
+          const c2 = clusterData[j];
+          
+          const dist = Math.sqrt(
+            (c1.centerX - c2.centerX) ** 2 + (c1.centerY - c2.centerY) ** 2
+          );
+          
+          const minSeparation = 15; // Minimum gap between cluster circles
+          const overlap = (c1.radius + c2.radius + minSeparation) - dist;
+          
+          if (overlap > 0) {
+            // Shrink both radii proportionally to eliminate overlap
+            const shrinkFactor = 0.88; // Reduce by 12% (less aggressive than before)
+            // Ensure we never go below the minimum required radius to contain all points
+            c1.radius = Math.max(c1.radius * shrinkFactor, c1.minRequiredRadius, 30);
+            c2.radius = Math.max(c2.radius * shrinkFactor, c2.minRequiredRadius, 30);
+          }
+        }
+      }
+
+      // Draw all clusters with adjusted radii
+      clusterData.forEach(({ idx, centerX, centerY, radius, cluster }) => {
         ctx.fillStyle = cluster.color.replace('hsl', 'hsla').replace(')', ', 0.08)');
         ctx.strokeStyle = cluster.color;
         ctx.lineWidth = 3;
@@ -298,13 +345,15 @@ export function ScatterPlot({
       onPointHover?.(null);
     }
 
-    // Check for hovered clusters
+    // Check for hovered clusters - use same radius calculation logic
     let foundCluster = false;
-    clusters.forEach((cluster, idx) => {
-      if (cluster.pointIndices.length === 0) return;
+    
+    // Calculate cluster data with same logic as drawing
+    const clusterData = clusters.map((cluster, idx) => {
+      if (cluster.pointIndices.length === 0) return null;
 
       const points = cluster.pointIndices.map(i => dataPoints[i]).filter(Boolean);
-      if (points.length === 0) return;
+      if (points.length === 0) return null;
 
       const xs = points.map(p => scaleX(p.x));
       const ys = points.map(p => scaleY(p.y));
@@ -316,10 +365,54 @@ export function ScatterPlot({
         ...xs.map((x, i) => Math.sqrt((x - centerX) ** 2 + (ys[i] - centerY) ** 2))
       );
 
-      const radius = maxDist + 30;
+      // Match the drawing logic exactly
+      const minRequiredRadius = maxDist + 30;
+      const sizeBonus = points.length === 1 ? 15 : points.length === 2 ? 10 : 5;
+      const initialRadius = minRequiredRadius + sizeBonus;
+
+      return {
+        idx,
+        centerX,
+        centerY,
+        radius: initialRadius,
+        minRequiredRadius,
+        cluster
+      };
+    }).filter(Boolean) as Array<{
+      idx: number;
+      centerX: number;
+      centerY: number;
+      radius: number;
+      minRequiredRadius: number;
+      cluster: ClusterInfo;
+    }>;
+
+    // Apply same overlap prevention as in drawing
+    for (let i = 0; i < clusterData.length; i++) {
+      for (let j = i + 1; j < clusterData.length; j++) {
+        const c1 = clusterData[i];
+        const c2 = clusterData[j];
+        
+        const dist = Math.sqrt(
+          (c1.centerX - c2.centerX) ** 2 + (c1.centerY - c2.centerY) ** 2
+        );
+        
+        const minSeparation = 15;
+        const overlap = (c1.radius + c2.radius + minSeparation) - dist;
+        
+        if (overlap > 0) {
+          const shrinkFactor = 0.88;
+          c1.radius = Math.max(c1.radius * shrinkFactor, c1.minRequiredRadius, 30);
+          c2.radius = Math.max(c2.radius * shrinkFactor, c2.minRequiredRadius, 30);
+        }
+      }
+    }
+
+    // Check for hover with adjusted radii
+    clusterData.forEach(({ idx, centerX, centerY, radius, cluster }) => {
       const dist = Math.sqrt((centerX - x) ** 2 + (centerY - y) ** 2);
 
-      if (dist < radius && !foundPoint) {
+      if (dist < radius && !foundPoint && !foundCluster) {
         setHoveredCluster(idx);
         onClusterHover?.(cluster);
         foundCluster = true;
