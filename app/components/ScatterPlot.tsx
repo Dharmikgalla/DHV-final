@@ -15,6 +15,9 @@ interface ScatterPlotProps {
   onPointHover?: (point: DataPoint | null) => void;
   onClusterHover?: (cluster: ClusterInfo | null) => void;
   addMode: boolean;
+  storyText?: string;
+  currentStep?: number;
+  clusteringSteps?: any[];
 }
 
 export function ScatterPlot({
@@ -30,6 +33,9 @@ export function ScatterPlot({
   onPointHover,
   onClusterHover,
   addMode,
+  storyText,
+  currentStep,
+  clusteringSteps,
 }: ScatterPlotProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -40,17 +46,40 @@ export function ScatterPlot({
 
   const padding = { top: 40, right: 40, bottom: 60, left: 70 };
 
+  // Generate a unique color for each data point index
+  const getPointColor = (pointIdx: number, totalPoints: number): string => {
+    // Distribute colors evenly across the HSL hue spectrum (0-360)
+    const hue = (pointIdx * 360) / Math.max(totalPoints, 1);
+    // Use moderate saturation and lightness for visibility
+    const saturation = 65 + (pointIdx % 3) * 5; // Vary between 65-75
+    const lightness = 50 + (pointIdx % 2) * 5; // Vary between 50-55
+    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+  };
+
   useEffect(() => {
     const updateDimensions = () => {
       if (containerRef.current) {
-        const { width } = containerRef.current.getBoundingClientRect();
-        setDimensions({ width, height: Math.max(500, width * 0.75) });
+        // Use full width of container (now side by side, so it's half the screen)
+        const containerWidth = containerRef.current.getBoundingClientRect().width || window.innerWidth * 0.48;
+        // Calculate height based on viewport to ensure graph fits in single screen
+        // Use viewport height minus header/controls (approximately 300px for other content)
+        const availableHeight = window.innerHeight - 300;
+        // Use square-ish aspect ratio or available height, whichever is smaller
+        // Ensure minimum height for visibility
+        const calculatedHeight = Math.max(500, Math.min(availableHeight, containerWidth * 0.9));
+        setDimensions({ width: containerWidth, height: calculatedHeight });
       }
     };
 
     updateDimensions();
+    const timer = setTimeout(updateDimensions, 100);
+    const timer2 = setTimeout(updateDimensions, 300);
     window.addEventListener('resize', updateDimensions);
-    return () => window.removeEventListener('resize', updateDimensions);
+    return () => {
+      window.removeEventListener('resize', updateDimensions);
+      clearTimeout(timer);
+      clearTimeout(timer2);
+    };
   }, []);
 
   const getScales = () => {
@@ -452,7 +481,7 @@ export function ScatterPlot({
   return (
     <div
       ref={containerRef}
-      className="relative w-full bg-card rounded-md border border-card-border overflow-visible"
+      className="relative w-full bg-card rounded-xl border border-border/50 shadow-md overflow-visible transition-all hover:shadow-lg backdrop-blur-sm"
       onMouseMove={handleMouseMove}
       onMouseLeave={() => {
         setHoveredPoint(null);
@@ -504,7 +533,7 @@ export function ScatterPlot({
                 <IconComponent
                   className={`w-6 h-6 transition-all ${isHovered ? 'scale-125' : ''}`}
                   style={{
-                    color: cluster ? cluster.color : 'hsl(var(--foreground))',
+                    color: cluster ? cluster.color : getPointColor(idx, dataPoints.length), // Use cluster color if clustered, otherwise unique color
                     filter: isHovered ? 'drop-shadow(0 0 4px currentColor)' : 'none',
                   }}
                 />
@@ -521,6 +550,77 @@ export function ScatterPlot({
               <IconComponent className="w-6 h-6" style={{ color: 'hsl(var(--primary))' }} />
             </foreignObject>
           </g>
+        )}
+
+        {/* Story text at changing data points */}
+        {storyText && currentStep !== undefined && currentStep > 0 && clusteringSteps && clusteringSteps.length > 0 && (
+          (() => {
+            // Find the latest step that shows a connection/merge
+            const latestStep = clusteringSteps[Math.min(currentStep - 1, clusteringSteps.length - 1)];
+            if (!latestStep || !latestStep.cluster1 || !latestStep.cluster2) return null;
+            
+            // Get the first point from each cluster being connected
+            const point1Idx = latestStep.cluster1[0];
+            const point2Idx = latestStep.cluster2[0];
+            
+            if (point1Idx === undefined || point2Idx === undefined || !dataPoints[point1Idx] || !dataPoints[point2Idx]) {
+              return null;
+            }
+            
+            const p1 = dataPoints[point1Idx];
+            const p2 = dataPoints[point2Idx];
+            
+            // Calculate midpoint
+            const midX = (scaleX(p1.x) + scaleX(p2.x)) / 2;
+            const midY = (scaleY(p1.y) + scaleY(p2.y)) / 2;
+            
+            // Calculate offset to position text above the midpoint, not covering the points
+            // Use a vector from midpoint to one of the points, then offset perpendicularly
+            const dx = scaleX(p2.x) - scaleX(p1.x);
+            const dy = scaleY(p2.y) - scaleY(p1.y);
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            // Offset perpendicular to the line connecting the points
+            // Normalize the vector and rotate 90 degrees
+            const offsetX = dist > 0 ? (-dy / dist) * 80 : 0;
+            const offsetY = dist > 0 ? (dx / dist) * 80 : -80;
+            
+            // Position text offset from midpoint
+            const textX = midX + offsetX;
+            const textY = midY + offsetY;
+            
+            return (
+              <g key="story-text" transform={`translate(${textX}, ${textY})`}>
+                {/* Simple background for readability */}
+                <rect
+                  x="-200"
+                  y="-20"
+                  width="400"
+                  height="40"
+                  rx="4"
+                  fill="hsl(var(--background))"
+                  fillOpacity="0.9"
+                />
+                {/* Simple story text */}
+                <foreignObject x="-195" y="-18" width="390" height="36">
+                  <div 
+                    className="text-center"
+                    style={{
+                      fontSize: '14px',
+                      fontWeight: '400',
+                      lineHeight: '1.4',
+                      color: 'hsl(var(--foreground))',
+                      fontFamily: 'Inter, system-ui, sans-serif',
+                      wordWrap: 'break-word',
+                      overflowWrap: 'break-word',
+                    }}
+                  >
+                    {storyText}
+                  </div>
+                </foreignObject>
+              </g>
+            );
+          })()
         )}
       </svg>
     </div>

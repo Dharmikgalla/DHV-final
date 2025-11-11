@@ -75,9 +75,12 @@ next-env.d.ts
 # Vercel
 .vercel
 
-# Documentation artifacts (keep only README.md)
+# Documentation artifacts (keep README.md and docs)
 *.md
 !README.md
+!GIT_SETUP.md
+!docs/**/*.md
+!screenshots/**/*.md
 
 # Windows batch/PowerShell files
 *.bat

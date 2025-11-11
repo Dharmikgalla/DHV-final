@@ -1,0 +1,32 @@
+1
+00:00:00,000 --> 00:00:08,000
+How do we group things so they make sense?
+
+2
+00:00:08,000 --> 00:00:23,000
+Group similar items.
+
+3
+00:00:23,000 --> 00:00:43,000
+Groups inside groups — a hierarchy.
+
+4
+00:00:43,000 --> 00:01:08,000
+Start alone → join closest → build the tree.
+
+5
+00:01:08,000 --> 00:01:28,000
+Cut the tree to choose how many groups.
+
+6
+00:01:28,000 --> 00:01:40,000
+Photos, shoppers, animals — all use clustering.
+
+7
+00:01:40,000 --> 00:01:52,000
+Find groups. See relationships. Choose granularity.
+
+8
+00:01:52,000 --> 00:02:00,000
+Try interactive cards →
+

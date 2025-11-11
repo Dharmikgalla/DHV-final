@@ -1,16 +1,19 @@
+"use client";
+
 import { useState, useEffect, useRef } from 'react';
 import { ScatterPlot } from '@/components/ScatterPlot';
 import { Dendrogram } from '@/components/Dendrogram';
 import { DataPointTooltip } from '@/components/DataPointTooltip';
 import { ClusterTooltip } from '@/components/ClusterTooltip';
 import { ControlPanel } from '@/components/ControlPanel';
-import { StoryDisplay } from '@/components/StoryDisplay';
+import { Button } from '@/components/ui/button';
 import { convertToDataPoints, convertToDataPointsWithAxes, DATASET_CONFIGS, getClusterName } from '@/lib/datasets';
 import { DataPoint, ClusterInfo } from '@shared/schema';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import { Loader2, Layers, MousePointer2 } from 'lucide-react';
+import { Loader2, Layers, MousePointer2, ArrowLeft, Home } from 'lucide-react';
+import Link from 'next/link';
 
 export default function ClusteringPage() {
   const [dataset, setDataset] = useState<'medical' | 'crime' | 'customer'>('medical');
@@ -32,11 +35,71 @@ export default function ClusteringPage() {
   const [clusteringSteps, setClusteringSteps] = useState<any[]>([]);
   const [finalClusters, setFinalClusters] = useState<number[][]>([]);
   const [cutLine, setCutLine] = useState<number | undefined>(undefined);
+  const [dendrogramHeight, setDendrogramHeight] = useState(400);
+  const [layout, setLayout] = useState<'side-by-side' | 'top-bottom'>('side-by-side');
 
   const playIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
   const config = DATASET_CONFIGS[dataset];
+
+  // Update dendrogram height based on number of data points - ensure enough space for all labels
+  // Also match scatter plot height for side-by-side layout
+  useEffect(() => {
+    const updateDendrogramHeight = () => {
+      // Calculate required height: 50px spacing per label + padding
+      // Add extra space to ensure no overlap
+      const minSpacing = 50;
+      const headerHeight = 80; // Header section height
+      const requiredHeight = dataPoints.length > 0 
+        ? (dataPoints.length - 1) * minSpacing + headerHeight + 100 // 100px for padding and margins
+        : 400;
+      
+      // Calculate available height based on layout
+      let availableHeight: number;
+      if (layout === 'side-by-side') {
+        // Side-by-side: viewport minus header/controls (approximately 300px)
+        availableHeight = window.innerHeight - 300;
+      } else {
+        // Top-bottom: viewport minus header/controls and scatter plot space
+        // Scatter plot typically takes about 40-50% of viewport in top-bottom layout
+        availableHeight = (window.innerHeight - 300) * 0.5; // Reserve 50% for scatter plot, 50% for dendrogram
+      }
+      
+      if (layout === 'side-by-side') {
+        // Match scatter plot height for side-by-side alignment
+        const scatterPlotHeight = Math.max(500, Math.min(availableHeight, window.innerWidth * 0.48 * 0.9));
+        const calculatedHeight = Math.max(
+          Math.max(400, requiredHeight),
+          scatterPlotHeight
+        );
+        setDendrogramHeight(calculatedHeight);
+      } else {
+        // Top-bottom layout: prioritize showing all data points without overlap
+        // Always use required height to ensure all data points are visible
+        // Calculate based on full viewport minus header/controls for more accurate sizing
+        const fullAvailableHeight = window.innerHeight - 300;
+        const scatterPlotEstimatedHeight = Math.min(600, fullAvailableHeight * 0.45); // Estimate scatter plot height
+        const dendrogramAvailableHeight = fullAvailableHeight - scatterPlotEstimatedHeight;
+        
+        // Always use required height - this ensures all data points fit without overlap
+        // Use required height directly, ensuring minimum of 400px
+        const finalHeight = Math.max(requiredHeight, 400);
+        
+        setDendrogramHeight(finalHeight);
+      }
+    };
+
+    updateDendrogramHeight();
+    const timer = setTimeout(updateDendrogramHeight, 100);
+    const timer2 = setTimeout(updateDendrogramHeight, 300);
+    window.addEventListener('resize', updateDendrogramHeight);
+    return () => {
+      window.removeEventListener('resize', updateDendrogramHeight);
+      clearTimeout(timer);
+      clearTimeout(timer2);
+    };
+  }, [dataPoints.length, layout]);
 
   // Initialize axes when dataset changes
   useEffect(() => {
@@ -127,11 +190,26 @@ export default function ClusteringPage() {
 
           const diagnosis = config.getDiagnosis?.(stats);
           const name = getClusterName(dataset, idx, clustersAtCut.length, stats, dataPoints, indices);
+          
+          // Generate unique color for each cluster based on cluster index
+          const generateClusterColor = (clusterIdx: number, totalClusters: number): string => {
+            // First, try to use predefined colors
+            if (clusterIdx < config.clusterColors.length) {
+              return config.clusterColors[clusterIdx];
+            }
+            // Generate additional colors if needed - ensure each cluster has a unique color
+            const hue = (clusterIdx * 360) / Math.max(totalClusters, 1);
+            const saturation = 65 + (clusterIdx % 3) * 5;
+            const lightness = 50 + (clusterIdx % 2) * 5;
+            return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+          };
+          
+          const color = generateClusterColor(idx, clustersAtCut.length);
 
           return {
             id: idx,
             pointIndices: indices,
-            color: config.clusterColors[idx % config.clusterColors.length],
+            color: color,
             stats,
             diagnosis,
             name,
@@ -180,6 +258,20 @@ export default function ClusteringPage() {
       setCurrentStep(0);
     }
     setIsPlaying(!isPlaying);
+  };
+
+  const handlePrevious = () => {
+    if (currentStep > 0) {
+      setCurrentStep(currentStep - 1);
+      setIsPlaying(false); // Pause when manually stepping
+    }
+  };
+
+  const handleNext = () => {
+    if (currentStep < totalSteps) {
+      setCurrentStep(currentStep + 1);
+      setIsPlaying(false); // Pause when manually stepping
+    }
   };
 
   const handleReset = () => {
@@ -335,6 +427,24 @@ export default function ClusteringPage() {
         const clustersAtStep = getClustersAtStep(currentStep, clusteringSteps, dataPoints.length);
         
         if (clustersAtStep.length > 0) {
+          // Generate unique colors for each cluster
+          // If we have more clusters than predefined colors, generate additional unique colors
+          const generateClusterColor = (clusterIdx: number, totalClusters: number): string => {
+            // First, try to use predefined colors
+            if (clusterIdx < config.clusterColors.length) {
+              return config.clusterColors[clusterIdx];
+            }
+            // If we need more colors, generate them evenly across the HSL spectrum
+            // Start from where predefined colors end
+            const predefinedCount = config.clusterColors.length;
+            const additionalClusters = totalClusters - predefinedCount;
+            const hueStart = 0; // Start from beginning of spectrum
+            const hue = (clusterIdx * 360) / Math.max(totalClusters, 1);
+            const saturation = 65 + (clusterIdx % 3) * 5; // Vary between 65-75
+            const lightness = 50 + (clusterIdx % 2) * 5; // Vary between 50-55
+            return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+          };
+          
           const stepClusters: ClusterInfo[] = clustersAtStep.map((indices, idx) => {
             const clusterPoints = indices.map(i => dataPoints[i]).filter(Boolean);
             const stats: Record<string, number> = {};
@@ -349,11 +459,14 @@ export default function ClusteringPage() {
 
             const diagnosis = config.getDiagnosis?.(stats);
             const name = getClusterName(dataset, idx, clustersAtStep.length, stats, dataPoints, indices);
+            
+            // Assign unique color to each cluster based on cluster index
+            const color = generateClusterColor(idx, clustersAtStep.length);
 
             return {
               id: idx,
               pointIndices: indices,
-              color: config.clusterColors[idx % config.clusterColors.length],
+              color: color,
               stats,
               diagnosis,
               name,
@@ -418,6 +531,29 @@ export default function ClusteringPage() {
 
   return (
     <div className="min-h-screen bg-background" onMouseMove={handleMouseMove}>
+      {/* Header - Full Width at Top */}
+      <div className="w-full bg-gradient-to-br from-card via-card to-primary/5 border-b border-border/50 shadow-sm">
+        <div className="container mx-auto max-w-screen-2xl px-6 py-8">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <h1 className="text-5xl font-bold tracking-tight mb-3 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                Interactive Hierarchical Clustering
+              </h1>
+              <p className="text-lg text-muted-foreground font-medium">
+                Learn Hierarchical clustering algorithms through visualization
+              </p>
+            </div>
+            <Link href="/">
+              <Button variant="outline" className="gap-2 shadow-sm">
+                <Home className="w-4 h-4" />
+                <ArrowLeft className="w-4 h-4" />
+                Back to Home
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+
       <ControlPanel
         dataset={dataset}
         algorithm={algorithm}
@@ -435,151 +571,264 @@ export default function ClusteringPage() {
         onReset={handleReset}
         onAddModeToggle={() => setAddMode(!addMode)}
         onStepChange={setCurrentStep}
+        onPrevious={handlePrevious}
+        onNext={handleNext}
+        layout={layout}
+        onLayoutChange={setLayout}
       />
 
-      <div className="container mx-auto max-w-screen-2xl px-6 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold tracking-tight mb-2">
-            Interactive Hierarchical Clustering
-          </h1>
-          <p className="text-lg text-muted-foreground">
-            Learn machine learning clustering algorithms through visual storytelling
-          </p>
-        </div>
+      <div className="container mx-auto max-w-screen-2xl px-6 py-4">
 
         {/* Loading State */}
         {clusterMutation.isPending && (
-          <div className="flex items-center justify-center gap-3 p-8 bg-card rounded-md border border-card-border mb-6">
+          <div className="flex items-center justify-center gap-3 p-6 bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 rounded-lg border border-primary/20 shadow-sm mb-4 backdrop-blur-sm">
             <Loader2 className="w-6 h-6 animate-spin text-primary" />
-            <span className="text-lg font-medium">Computing clusters...</span>
+            <span className="text-lg font-semibold text-foreground">Computing clusters...</span>
           </div>
         )}
 
-        {/* Story Display */}
-        <StoryDisplay 
-          dataset={dataset} 
-          algorithm={algorithm} 
-          currentStep={currentStep} 
-        />
+        {/* Main Visualization Area - Conditional Layout */}
+        {layout === 'side-by-side' ? (
+          /* Side by Side Layout */
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* Scatter Plot - Left Side */}
+            <div className="flex-1 min-w-0">
+              <div className="relative">
+                <div className="mb-3">
+                  <h2 className="text-2xl font-bold mb-1 bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent">{config.name}</h2>
+                  <p className="text-sm text-muted-foreground font-medium">
+                    {addMode ? 'Click anywhere on the plot to add a new data point' : 'Watch clusters form step-by-step'}
+                  </p>
+                </div>
 
-        {/* Main Visualization Area */}
-        <div className="space-y-8">
-          {/* Scatter Plot */}
-          <div className="relative">
-            <div className="mb-4">
-              <h2 className="text-2xl font-semibold mb-1">{config.name}</h2>
-              <p className="text-sm text-muted-foreground">
-                {addMode ? 'Click anywhere on the plot to add a new data point' : 'Watch clusters form step-by-step'}
-              </p>
+                {/* Add Mode Instructions */}
+                {addMode && (
+                  <div className="mb-4 p-4 bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 border border-primary/30 rounded-lg shadow-sm backdrop-blur-sm">
+                    <div className="flex items-start gap-4">
+                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                        <MousePointer2 className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-primary mb-2 text-lg">Add Data Point Mode Active</h4>
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                          Click anywhere on the scatter plot below to add a new {dataset} data point. 
+                          The point will be automatically created with appropriate attributes and clustering will be recalculated.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <ScatterPlot
+                  dataPoints={dataPoints}
+                  clusters={clusters}
+                  connections={connections}
+                  datasetType={dataset}
+                  xLabel={config.availableAxes?.find(axis => axis.key === xAxis)?.label || config.xAxis.label}
+                  yLabel={config.availableAxes?.find(axis => axis.key === yAxis)?.label || config.yAxis.label}
+                  xRange={config.availableAxes?.find(axis => axis.key === xAxis)?.range}
+                  yRange={config.availableAxes?.find(axis => axis.key === yAxis)?.range}
+                  onAddPoint={handleAddPoint}
+                  onPointHover={setHoveredPoint}
+                  onClusterHover={setHoveredCluster}
+                  addMode={addMode}
+                  storyText={config.getStoryStep ? config.getStoryStep(currentStep, algorithm) : undefined}
+                  currentStep={currentStep}
+                  clusteringSteps={clusteringSteps}
+                />
+
+                {/* Tooltips */}
+                {hoveredPoint && (
+                  <DataPointTooltip
+                    point={hoveredPoint}
+                    datasetType={dataset}
+                    position={mousePos}
+                  />
+                )}
+
+                {hoveredCluster && (
+                  <ClusterTooltip
+                    cluster={hoveredCluster}
+                    datasetType={dataset}
+                    position={mousePos}
+                  />
+                )}
+              </div>
             </div>
 
-            {/* Add Mode Instructions */}
-            {addMode && (
-              <div className="mb-4 p-4 bg-primary/10 border border-primary/30 rounded-md">
-                <div className="flex items-start gap-3">
-                  <MousePointer2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                  <div>
-                    <h4 className="font-semibold text-primary mb-1">Add Data Point Mode Active</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Click anywhere on the scatter plot below to add a new {dataset} data point. 
-                      The point will be automatically created with appropriate attributes and clustering will be recalculated.
-                    </p>
-                  </div>
+            {/* Dendrogram - Right Side */}
+            <div className="flex-1 min-w-0">
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-2xl font-bold mb-1 bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent">Dendrogram</h2>
+                  <p className="text-sm text-muted-foreground font-medium">
+                    Hierarchical tree showing cluster relationships - Click and drag to adjust the cut line
+                  </p>
+                </div>
+
+                {/* Dendrogram Tree Block */}
+                <div 
+                  className="w-full bg-card rounded-xl shadow-md border border-border/50 transition-all hover:shadow-lg"
+                  style={{ 
+                    height: dendrogramHeight + 'px',
+                    minHeight: dendrogramHeight + 'px'
+                  }}
+                >
+                  <Dendrogram
+                    tree={dendrogramTree}
+                    currentHeight={currentHeight}
+                    labels={dataPoints.map(p => p.id)}
+                    colors={dataPoints.map((_, idx) => {
+                      const cluster = clusters.find(c => c.pointIndices.includes(idx));
+                      if (cluster) return cluster.color;
+                      // Generate unique color for each point when not in a cluster
+                      const hue = (idx * 360) / Math.max(dataPoints.length, 1);
+                      const saturation = 65 + (idx % 3) * 5;
+                      const lightness = 50 + (idx % 2) * 5;
+                      return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+                    })}
+                    cutLine={cutLine}
+                    onCutLineChange={setCutLine}
+                    currentStep={currentStep}
+                    totalSteps={totalSteps}
+                    clusteringSteps={clusteringSteps}
+                  />
                 </div>
               </div>
-            )}
-
-            <ScatterPlot
-              dataPoints={dataPoints}
-              clusters={clusters}
-              connections={connections}
-              datasetType={dataset}
-              xLabel={config.availableAxes?.find(axis => axis.key === xAxis)?.label || config.xAxis.label}
-              yLabel={config.availableAxes?.find(axis => axis.key === yAxis)?.label || config.yAxis.label}
-              xRange={config.availableAxes?.find(axis => axis.key === xAxis)?.range}
-              yRange={config.availableAxes?.find(axis => axis.key === yAxis)?.range}
-              onAddPoint={handleAddPoint}
-              onPointHover={setHoveredPoint}
-              onClusterHover={setHoveredCluster}
-              addMode={addMode}
-            />
-
-            {/* Tooltips */}
-            {hoveredPoint && (
-              <DataPointTooltip
-                point={hoveredPoint}
-                datasetType={dataset}
-                position={mousePos}
-              />
-            )}
-
-            {hoveredCluster && (
-              <ClusterTooltip
-                cluster={hoveredCluster}
-                datasetType={dataset}
-                position={mousePos}
-              />
-            )}
-          </div>
-
-          {/* Dendrogram - Full Width Below Scatter Plot */}
-          <div className="w-full space-y-4">
-            <div>
-              <h2 className="text-2xl font-semibold mb-1">Dendrogram</h2>
-              <p className="text-sm text-muted-foreground">
-                Hierarchical tree showing cluster relationships - Click and drag to adjust the cut line
-              </p>
             </div>
+          </div>
+        ) : (
+          /* Top Bottom Layout */
+          <div className="space-y-4">
+            {/* Scatter Plot - Top */}
+            <div className="relative">
+              <div className="mb-3">
+                <h2 className="text-2xl font-bold mb-1 bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent">{config.name}</h2>
+                <p className="text-sm text-muted-foreground font-medium">
+                  {addMode ? 'Click anywhere on the plot to add a new data point' : 'Watch clusters form step-by-step'}
+                </p>
+              </div>
 
-            {/* Dendrogram Tree Block */}
-            <div 
-              className="w-full bg-card rounded-lg shadow-sm border border-border"
-              style={{ 
-                height: Math.max(600, dataPoints.length * 60 + 180) + 'px' 
-              }}
-            >
-              <Dendrogram
-                tree={dendrogramTree}
-                currentHeight={currentHeight}
-                labels={dataPoints.map(p => p.id)}
-                colors={dataPoints.map((_, idx) => {
-                  const cluster = clusters.find(c => c.pointIndices.includes(idx));
-                  return cluster?.color || 'hsl(var(--foreground))';
-                })}
-                cutLine={cutLine}
-                onCutLineChange={setCutLine}
+              {/* Add Mode Instructions */}
+              {addMode && (
+                <div className="mb-4 p-4 bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 border border-primary/30 rounded-lg shadow-sm backdrop-blur-sm">
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                      <MousePointer2 className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-primary mb-2 text-lg">Add Data Point Mode Active</h4>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        Click anywhere on the scatter plot below to add a new {dataset} data point. 
+                        The point will be automatically created with appropriate attributes and clustering will be recalculated.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <ScatterPlot
+                dataPoints={dataPoints}
+                clusters={clusters}
+                connections={connections}
+                datasetType={dataset}
+                xLabel={config.availableAxes?.find(axis => axis.key === xAxis)?.label || config.xAxis.label}
+                yLabel={config.availableAxes?.find(axis => axis.key === yAxis)?.label || config.yAxis.label}
+                xRange={config.availableAxes?.find(axis => axis.key === xAxis)?.range}
+                yRange={config.availableAxes?.find(axis => axis.key === yAxis)?.range}
+                onAddPoint={handleAddPoint}
+                onPointHover={setHoveredPoint}
+                onClusterHover={setHoveredCluster}
+                addMode={addMode}
+                storyText={config.getStoryStep ? config.getStoryStep(currentStep, algorithm) : undefined}
                 currentStep={currentStep}
-                totalSteps={totalSteps}
                 clusteringSteps={clusteringSteps}
               />
+
+              {/* Tooltips */}
+              {hoveredPoint && (
+                <DataPointTooltip
+                  point={hoveredPoint}
+                  datasetType={dataset}
+                  position={mousePos}
+                />
+              )}
+
+              {hoveredCluster && (
+                <ClusterTooltip
+                  cluster={hoveredCluster}
+                  datasetType={dataset}
+                  position={mousePos}
+                />
+              )}
             </div>
 
-            {/* Separate Cut Line Information Block */}
-            <div className="w-full bg-card rounded-lg shadow-sm border border-border p-6">
-              <div className="flex items-center gap-4">
+            {/* Dendrogram - Bottom */}
+            <div className="w-full space-y-4">
+              <div>
+                <h2 className="text-2xl font-bold mb-1 bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent">Dendrogram</h2>
+                <p className="text-sm text-muted-foreground font-medium">
+                  Hierarchical tree showing cluster relationships - Click and drag to adjust the cut line
+                </p>
+              </div>
+
+              {/* Dendrogram Tree Block */}
+              <div 
+                className="w-full bg-card rounded-xl shadow-md border border-border/50 transition-all hover:shadow-lg"
+                style={{ 
+                  height: dendrogramHeight + 'px',
+                  minHeight: dendrogramHeight + 'px'
+                }}
+              >
+                <Dendrogram
+                  tree={dendrogramTree}
+                  currentHeight={currentHeight}
+                  labels={dataPoints.map(p => p.id)}
+                  colors={dataPoints.map((_, idx) => {
+                    const cluster = clusters.find(c => c.pointIndices.includes(idx));
+                    if (cluster) return cluster.color;
+                    // Generate unique color for each point when not in a cluster
+                    const hue = (idx * 360) / Math.max(dataPoints.length, 1);
+                    const saturation = 65 + (idx % 3) * 5;
+                    const lightness = 50 + (idx % 2) * 5;
+                    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+                  })}
+                  cutLine={cutLine}
+                  onCutLineChange={setCutLine}
+                  currentStep={currentStep}
+                  totalSteps={totalSteps}
+                  clusteringSteps={clusteringSteps}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Separate Cut Line Information Block */}
+        <div className="w-full bg-gradient-to-r from-card via-card to-primary/5 rounded-xl shadow-md border border-border/50 p-4 backdrop-blur-sm transition-all hover:shadow-lg">
+              <div className="flex items-center gap-5">
                 <div className="flex-shrink-0">
-                  <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
-                    <svg className="w-6 h-6 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-destructive/20 to-destructive/10 flex items-center justify-center shadow-sm border border-destructive/20">
+                    <svg className="w-7 h-7 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z" />
                     </svg>
                   </div>
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold mb-1">Cut Line Control</h3>
-                  <p className="text-sm text-muted-foreground mb-3">
+                  <h3 className="text-lg font-bold mb-1 bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text text-transparent">Cut Line Control</h3>
+                  <p className="text-xs text-muted-foreground mb-3 leading-relaxed font-medium">
                     Click and drag on the dendrogram above to adjust the cut line position. The cut line determines how many clusters are formed.
                   </p>
-                  <div className="flex items-center gap-6">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-muted-foreground">Current Distance:</span>
-                      <span className="text-xl font-bold text-destructive">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 bg-background/50 rounded-lg px-3 py-1.5 border border-border/50 shadow-sm">
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Distance:</span>
+                      <span className="text-lg font-bold text-destructive">
                         {(cutLine !== undefined ? cutLine : (dendrogramTree?.height || 0) * 0.6).toFixed(2)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-muted-foreground">Clusters Formed:</span>
-                      <span className="text-xl font-bold text-primary">
+                    <div className="flex items-center gap-2 bg-background/50 rounded-lg px-3 py-1.5 border border-border/50 shadow-sm">
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Clusters:</span>
+                      <span className="text-lg font-bold text-primary">
                         {clusters.length || 'N/A'}
                       </span>
                     </div>
@@ -587,9 +836,6 @@ export default function ClusteringPage() {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-
       </div>
     </div>
   );

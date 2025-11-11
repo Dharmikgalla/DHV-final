@@ -34,34 +34,65 @@ export function Dendrogram({
 }: DendrogramProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 400, height: 600 });
   const [isDragging, setIsDragging] = useState(false);
 
-  const padding = { top: 50, right: 100, bottom: 60, left: 120 };
+  const padding = { top: 40, right: 30, bottom: 50, left: 120 };
 
   useEffect(() => {
     const updateDimensions = () => {
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        // Use actual canvas container dimensions (excluding padding and borders)
+      // Use the canvas container div to measure available space
+      const container = canvasContainerRef.current;
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        // Get the actual available space in the container
+        const computedStyle = window.getComputedStyle(container);
+        const paddingLeft = parseFloat(computedStyle.paddingLeft) || 8;
+        const paddingRight = parseFloat(computedStyle.paddingRight) || 8;
+        const paddingTop = parseFloat(computedStyle.paddingTop) || 8;
+        const paddingBottom = parseFloat(computedStyle.paddingBottom) || 8;
+        
+        // Use full container width and height
+        const availableWidth = rect.width - paddingLeft - paddingRight;
+        const availableHeight = rect.height - paddingTop - paddingBottom;
+        
+        // Calculate required height based on number of labels
+        // Minimum spacing: 50px per label to ensure no overlap
+        const minSpacing = 50;
+        const numLabels = labels.length;
+        const requiredHeight = numLabels > 0 
+          ? (numLabels - 1) * minSpacing + padding.top + padding.bottom + 40 // Extra buffer for safety
+          : 400;
+        
+        // Use the actual container width - no forced minimum to prevent horizontal scrolling
+        // Height: ensure we have at least the required height, but use available if it's larger
+        const calculatedWidth = availableWidth > 0 ? availableWidth : 800;
+        // Use the maximum of required height and available height to ensure all labels fit
+        const calculatedHeight = Math.max(requiredHeight, availableHeight > 0 ? availableHeight : requiredHeight);
+        
         setDimensions({ 
-          width: Math.max(rect.width - 16, 500), // Account for padding
-          height: Math.max(rect.height - 100, 500) // Account for header
+          width: calculatedWidth,
+          height: calculatedHeight
         });
       }
     };
 
     updateDimensions();
-    // Small delay to ensure container has rendered
-    const timer = setTimeout(updateDimensions, 100);
-    const timer2 = setTimeout(updateDimensions, 500); // Extra delay for layout
+    // Multiple delays to ensure container has fully rendered and layout is stable
+    const timer = setTimeout(updateDimensions, 50);
+    const timer2 = setTimeout(updateDimensions, 200);
+    const timer3 = setTimeout(updateDimensions, 500);
+    const timer4 = setTimeout(updateDimensions, 1000); // Final check
     window.addEventListener('resize', updateDimensions);
     return () => {
       window.removeEventListener('resize', updateDimensions);
       clearTimeout(timer);
       clearTimeout(timer2);
+      clearTimeout(timer3);
+      clearTimeout(timer4);
     };
-  }, [labels.length]); // Re-calculate when number of labels changes
+  }, [labels.length, labels]); // Re-calculate when number of labels changes
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -105,33 +136,62 @@ export function Dendrogram({
     const missingLabels = labels.filter(label => !labelsSet.has(label)).sort();
     const sortedLabels = [...orderedLabels, ...missingLabels];
     
-    // Calculate optimal spacing for labels to fit within container
+    // Calculate spacing for labels - ensure no overlap
     const availableHeight = dimensions.height - padding.top - padding.bottom;
-    const minSpacing = 35; // Increased from 20 to 35 for better visibility
-    const maxSpacing = 80; // Increased from 50 to 80 for generous spacing
-    const calculatedSpacing = Math.max(sortedLabels.length - 1, 1) > 0 
-      ? availableHeight / Math.max(sortedLabels.length - 1, 1)
-      : availableHeight;
-    const leafSpacing = Math.max(minSpacing, Math.min(maxSpacing, calculatedSpacing));
-
-    // Create a map of label to y position - ensure they fit within bounds
-    const labelToY = new Map<string, number>();
-    const totalHeight = (sortedLabels.length - 1) * leafSpacing;
-    const startY = padding.top + Math.max(0, (availableHeight - totalHeight) / 2);
+    const numLabels = sortedLabels.length;
     
-    sortedLabels.forEach((label, idx) => {
-      const yPos = startY + idx * leafSpacing;
-      // Clamp within bounds
-      const clampedY = Math.max(padding.top, Math.min(dimensions.height - padding.bottom, yPos));
-      labelToY.set(label, clampedY);
-    });
+    // Minimum spacing between labels to prevent overlap (50px ensures clear visibility)
+    const minSpacing = 50;
+    
+    // Calculate spacing: always use at least minimum spacing
+    const requiredMinHeight = (numLabels - 1) * minSpacing;
+    let leafSpacing: number;
+    
+    if (numLabels <= 1) {
+      leafSpacing = availableHeight;
+    } else if (requiredMinHeight <= availableHeight) {
+      // We have enough space - distribute evenly but ensure minimum spacing
+      const calculatedSpacing = availableHeight / (numLabels - 1);
+      leafSpacing = Math.max(minSpacing, calculatedSpacing);
+    } else {
+      // Use minimum spacing - canvas should be tall enough but use it anyway
+      leafSpacing = minSpacing;
+    }
+
+    // Create a map of label to y position - simple linear distribution
+    const labelToY = new Map<string, number>();
+    
+    if (numLabels === 1) {
+      // Single label - center it
+      labelToY.set(sortedLabels[0], padding.top + availableHeight / 2);
+    } else {
+      // Multiple labels - distribute evenly from top
+      const totalHeight = (numLabels - 1) * leafSpacing;
+      const startY = padding.top + (availableHeight - totalHeight) / 2;
+      
+      sortedLabels.forEach((label, idx) => {
+        const yPos = startY + idx * leafSpacing;
+        // Ensure it's within bounds
+        const clampedY = Math.max(padding.top + 10, Math.min(dimensions.height - padding.bottom - 10, yPos));
+        labelToY.set(label, clampedY);
+      });
+    }
 
     const maxHeight = getMaxHeight(tree);
     const scaleX = (height: number) => {
-      // Ensure we don't exceed the right boundary
+      // Use available width for scaling
       const availableWidth = dimensions.width - padding.left - padding.right;
-      const scaledValue = (height / (maxHeight || 1)) * availableWidth;
-      return padding.left + Math.min(scaledValue, availableWidth);
+      if (maxHeight === 0 || availableWidth <= 0) return padding.left;
+      
+      // Compress the scaling to fit within available width
+      // Use linear compression to reduce horizontal line length while maintaining proportions
+      const compressionFactor = 0.65; // Reduce horizontal length by 35% to fit better
+      const normalizedHeight = height / maxHeight;
+      // Apply linear compression
+      const compressedValue = normalizedHeight * availableWidth * compressionFactor;
+      const xPos = padding.left + compressedValue;
+      // Clamp to ensure it stays within bounds
+      return Math.max(padding.left, Math.min(padding.left + availableWidth, xPos));
     };
 
     // Draw leaf nodes and their horizontal lines
@@ -139,12 +199,12 @@ export function Dendrogram({
       const yPos = labelToY.get(label);
       if (yPos === undefined) return;
       
-      // Draw label with better visibility
+      // Draw label clearly
       ctx.fillStyle = 'hsl(var(--foreground))';
-      ctx.font = '12px JetBrains Mono';
+      ctx.font = '14px JetBrains Mono';
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
-      ctx.fillText(label, padding.left - 12, yPos);
+      ctx.fillText(label, padding.left - 10, yPos);
 
       // Draw horizontal line to axis
       ctx.strokeStyle = 'hsl(var(--border))';
@@ -176,28 +236,30 @@ export function Dendrogram({
 
     // Draw axis label
     ctx.fillStyle = 'hsl(var(--foreground))';
-    ctx.font = '11px Inter';
+    ctx.font = '12px Inter';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.fillText('Merge Distance', dimensions.width / 2, dimensions.height - 5);
 
     // Draw cut line (ensure it stays within bounds)
     const effectiveCutLine = cutLine !== undefined ? cutLine : (tree?.height || 0) * 0.6;
-    const cutX = Math.min(scaleX(effectiveCutLine), dimensions.width - padding.right);
+    const cutX = scaleX(effectiveCutLine);
+    // Clamp cut line to visible area
+    const clampedCutX = Math.min(Math.max(padding.left, cutX), dimensions.width - padding.right);
     ctx.strokeStyle = 'hsl(var(--destructive))';
     ctx.lineWidth = 3;
     ctx.setLineDash([5, 5]);
     ctx.beginPath();
-    ctx.moveTo(cutX, padding.top);
-    ctx.lineTo(cutX, dimensions.height - padding.bottom);
+    ctx.moveTo(clampedCutX, padding.top);
+    ctx.lineTo(clampedCutX, dimensions.height - padding.bottom);
     ctx.stroke();
     ctx.setLineDash([]);
     
-    // Draw cut line label (ensure it doesn't overflow)
+    // Draw cut line label
     ctx.fillStyle = 'hsl(var(--destructive))';
-    ctx.font = 'bold 11px Inter';
+    ctx.font = '11px Inter';
     ctx.textAlign = 'left';
-    const labelX = Math.min(cutX + 5, dimensions.width - padding.right - 60);
+    const labelX = Math.min(clampedCutX + 5, dimensions.width - padding.right - 60);
     ctx.fillText(`Cut: ${effectiveCutLine.toFixed(2)}`, labelX, padding.top + 15);
 
   }, [tree, currentHeight, dimensions, labels, colors, cutLine, currentStep, totalSteps, clusteringSteps]);
@@ -333,7 +395,7 @@ export function Dendrogram({
   };
 
   return (
-    <div ref={containerRef} className="w-full h-full overflow-hidden flex flex-col">
+    <div ref={containerRef} className="w-full h-full flex flex-col">
       <div className="px-6 py-4 border-b border-border flex-shrink-0 bg-muted/30">
         <div className="flex items-center justify-between">
           <div>
@@ -347,10 +409,15 @@ export function Dendrogram({
           </div>
         </div>
       </div>
-      <div className="flex-1 p-8 min-h-0 overflow-hidden bg-background">
+      <div ref={canvasContainerRef} className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden bg-background" style={{ padding: '8px' }}>
         <canvas 
           ref={canvasRef} 
-          className="w-full h-full cursor-crosshair block" 
+          className="cursor-crosshair block" 
+          style={{ 
+            width: `${dimensions.width}px`, 
+            height: `${dimensions.height}px`,
+            display: 'block'
+          }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
